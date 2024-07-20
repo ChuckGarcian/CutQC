@@ -27,6 +27,10 @@ def run ():
   
 def init_processes(backend):
     dist.init_process_group(backend, rank=WORLD_RANK, world_size=WORLD_SIZE)
+    device = torch.device("cuda:{}".format(LOCAL_RANK))
+    tensor = torch.zeros(1, device=device)
+    torch.set_default_device(device)        
+    dist.broadcast(tensor, src=0)  # Broadcast tensor from rank 0 to all others
     print ("Hello world! This is worker: {}. I have {} siblings!".format (dist.get_rank(), dist.get_world_size()))
     run ()
 

@@ -96,6 +96,7 @@ class DistributedGraphContractor(object):
         '''
         Performs distributed graph contraction. Returns the reconstructed probability
         '''   
+        torch.set_default_device(self.device)     
         edges = self.compute_graph.get_edges(from_node=None, to_node=None)
 
         # Assemble sequence of uncomputed kronecker products, to distribute to nodes later
@@ -121,27 +122,48 @@ class DistributedGraphContractor(object):
         Decomposes `dataset`list into 'num_batches' number of batches and distributes
         to worker processes. 
         '''
+        torch.set_default_device(self.device)     
         
-        # Batch all uncomputed product tuples into batches
-        batches = torch.stack(dataset).chunk(chunks=(num_batches))
-        tensor_sizes_data = torch.tensor(self.subcircuit_entry_lengths, dtype=torch.int64, requires_grad=False).cuda() # Used to strip zero padding 
-        print (f'batches: {batches}')
-        # Send off to nodes for compute
-        for dst_rank, batch in enumerate(batches):
-            # TODO: Convert to non-blocking send
-            shape_data = batch.shape
-            tensor_sizes_shape = tensor_sizes_data.shape 
-            dist.send(torch.tensor(tensor_sizes_shape, dtype=torch.int64, requires_grad=False).cuda(), dst=dst_rank+1) 
-            dist.send(tensor_sizes_data, dst=dst_rank+1)
+        with torch.no_grad ():
+            # Batch all uncomputed product tuples into batches
+            batches = torch.stack(dataset).chunk(chunks=(num_batches))
+            tensor_sizes = torch.tensor(self.subcircuit_entry_lengths, dtype=torch.int64) # Used to strip zero padding 
+            print (f'Host batches: {batches}')        
+            # Send off to nodes for compute
+            
+            op_list = []
+            # List of sending objectss
+            for dst, batch in enumerate(batches, start=1):
+                batch_shape = torch.tensor(batch.shape)
+                tensor_sizes_shape = torch.tensor(tensor_sizes.shape, dtype=torch.int64)
+                
+                op_list.extend([
+                    dist.P2POp(dist.isend, tensor_sizes_shape, dst),
+                    dist.P2POp(dist.isend, tensor_sizes, dst),
+                    dist.P2POp(dist.isend, batch_shape, dst),
+                    dist.P2POp(dist.isend, batch, dst)
+                ])
+                
+            work_handles = dist.batch_isend_irecv(op_list)
 
-            dist.send(torch.tensor(shape_data, requires_grad=False).cuda(), dst=dst_rank+1) # Exclude Rank 0 Host 
-            dist.send(batch.cuda(),  dst=dst_rank+1) 
-        
-        # Receive Results 
-        # TODO: Receive and reduce outputs outside of this function -- beyond the scope of this function
-        output_buff = torch.empty(self.result_size, dtype=torch.float32, requires_grad=False).cuda()  
-        dist.reduce(output_buff, dst=0, op=dist.ReduceOp.SUM)
-        
+            for handle in work_handles:
+                handle.wait ()
+            
+            # for dst_rank, batch in enumerate(batches):
+            #     # TODO: Convert to non-blocking send
+            #     shape_data = batch.shape
+            #     tensor_sizes_shape = tensor_sizes.shape 
+            #     dist.send(torch.tensor(tensor_sizes_shape, dtype=torch.int64, requires_grad=False).cuda(), dst=dst_rank+1) 
+            #     dist.send(tensor_sizes, dst=dst_rank+1)
+
+            #     dist.send(torch.tensor(shape_data, requires_grad=False).cuda(), dst=dst_rank+1) # Exclude Rank 0 Host 
+            #     dist.send(batch.cuda(),  dst=dst_rank+1) 
+            
+            # Receive Results 
+            # TODO: Receive and reduce outputs outside of this function -- beyond the scope of this function
+            output_buff = torch.empty(self.result_size, dtype=torch.float32, requires_grad=False).cuda()  
+            dist.reduce(output_buff, dst=0, op=dist.ReduceOp.SUM)
+            
         return torch.mul(output_buff, (1/2**self.num_cuts))
 
     def _get_subcircuit_entry_prob(self, subcircuit_idx: int):
@@ -158,6 +180,7 @@ class DistributedGraphContractor(object):
         Returns probability contribution for the basis 'EDGE_BASES' in the circuit
         cutting decomposition.
         """
+        torch.set_default_device(self.device)     
         self.compute_graph.assign_bases_to_edges(edge_bases=edge_bases, edges=edges)
 
         # Create list of kronecker product terms
@@ -172,7 +195,6 @@ class DistributedGraphContractor(object):
             product_list.append(new_component)
 
         return product_list
-
     def _initiate_worker_loop(self):
         '''
         Primary worker loop.
@@ -182,32 +204,55 @@ class DistributedGraphContractor(object):
         operation back to the host. Synchronization among nodes is provided via
         barriers and blocked message passing.
         '''
-        torch.cuda.device(self.device)        
+        torch.set_default_device(self.device)        
+        torch.cuda.set_device (self.device)
+        # Host will send signal to break from loop
 
         # Host will send signal to break from loop
         while True:
             with torch.no_grad ():
                 torch.cuda.synchronize(self.device)
                 
-                # Receive Tensor list information
+                # Used to allocate sufficient space
+                
                 tensor_sizes_shape = torch.empty([1], dtype=torch.int64) 
-                dist.recv(tensor=tensor_sizes_shape, src=__host_machine__)     
+                batch_shape = torch.empty([3], dtype=torch.int64)
+                shape_op_list = [
+                    dist.P2POp(dist.irecv, tensor_sizes_shape, __host_machine__),
+                    dist.P2POp(dist.irecv, batch_shape, __host_machine__),]
+                
+                reqs = dist.batch_isend_irecv (shape_op_list)
+                
+                for req in req: req.wait()
                 
                 # Check for termination signal
                 if tensor_sizes_shape.item() == -1:
                     break
+        
+                # Tensors we will receive
+        
+                tensor_sizes = torch.empty(tuple(tensor_sizes_shape), dtype=torch.int64)                
+                batch_received = torch.empty(tuple(batch_shape), dtype=torch.float32)
+
+                tensor_op_list = [
+                    dist.P2POp(dist.irecv, tensor_sizes, __host_machine__),
+                    dist.P2POp(dist.irecv, batch_received, __host_machine__) 
+                ]
                 
+                reqs = dist.batch_isend_irecv(tensor_op_list)
+                for req in reqs: req.wait ()                
+                
+                # Receive Tensor list information                       
                 # Used to remove padding 
-                tensor_sizes = torch.empty(tuple(tensor_sizes_shape), dtype=torch.int64)
-                dist.recv(tensor=tensor_sizes, src=__host_machine__)    
-                
                 # Get shape of the batch we are receiving 
-                shape_tensor = torch.empty([3], dtype=torch.int64)
-                dist.recv(tensor=shape_tensor, src=__host_machine__) 
+                # Create an empty batch tensor and receive its data            
+                #                 
+                # dist.recv(tensor=tensor_sizes_shape, src=__host_machine__)     
+                # dist.recv(tensor=tensor_sizes, src=__host_machine__)    
+                # dist.recv(tensor=shape_tensor, src=__host_machine__) 
+                # dist.recv(tensor=batch_received, src=__host_machine__)                    
                 
-                # Create an empty batch tensor and receive its data
-                batch_received = torch.empty(tuple(shape_tensor), dtype=torch.float32)
-                dist.recv(tensor=batch_received, src=__host_machine__)    
+                print (f"Worker, batch_received {batch_received}") 
                 
                 # Execute kronecker products in parallel (vectorization)
                 lambda_fn = lambda x: compute_kronecker_product(x, tensor_sizes)
@@ -216,9 +261,42 @@ class DistributedGraphContractor(object):
                 
                 # Send Back to host
                 dist.reduce(res, dst=__host_machine__, op=dist.ReduceOp.SUM)
-            
+        print ("Worker Rank: {} ... EXITED".format(dist.get_rank))    
         dist.destroy_process_group()
-        exit()
+        exit()            
+        # while True:
+        #     with torch.no_grad ():
+        #         torch.cuda.synchronize(self.device)
+                
+        #         # Receive Tensor list information
+        #         tensor_sizes_shape = torch.empty([1], dtype=torch.int64) 
+        #         dist.recv(tensor=tensor_sizes_shape, src=__host_machine__)     
+                
+        #         # Check for termination signal
+        #         if tensor_sizes_shape.item() == -1:
+        #             break
+                
+        #         # Used to remove padding 
+        #         tensor_sizes = torch.empty(tuple(tensor_sizes_shape), dtype=torch.int64)
+        #         dist.recv(tensor=tensor_sizes, src=__host_machine__)    
+                
+        #         # Get shape of the batch we are receiving 
+        #         shape_tensor = torch.empty([3], dtype=torch.int64)
+        #         dist.recv(tensor=shape_tensor, src=__host_machine__) 
+                
+        #         # Create an empty batch tensor and receive its data
+        #         batch_received = torch.empty(tuple(shape_tensor), dtype=torch.float32)
+        #         dist.recv(tensor=batch_received, src=__host_machine__)    
+                
+        #         # Execute kronecker products in parallel (vectorization)
+        #         lambda_fn = lambda x: compute_kronecker_product(x, tensor_sizes)
+        #         vec_fn = torch.func.vmap(lambda_fn)
+        #         res = vec_fn(batch_received).sum (dim=0)    
+                
+        #         # Send Back to host
+        #         dist.reduce(res, dst=__host_machine__, op=dist.ReduceOp.SUM)
+                
+
 
 # @torch.jit.script
 def compute_kronecker_product(components, tensor_sizes):
@@ -229,11 +307,9 @@ def compute_kronecker_product(components, tensor_sizes):
   
     # Initialize the result with the first component, adjusted by its size
     res = components_list[0][:tensor_sizes[0]]
-    i = 0
+
     # Sequentially compute the Kronecker product with the remaining components
     for component, size in zip(components_list[1:], tensor_sizes[1:]):
-        i += 1
-        print("i: {}".format (i))        
         new = torch.kron(res, component[:size])
         del (res)
         del (component)
