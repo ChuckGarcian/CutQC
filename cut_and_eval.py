@@ -14,7 +14,7 @@ from helper_functions.benchmarks import generate_circ
 def get_args ():    
     # Instantiate the parser
     parser = argparse.ArgumentParser(description='Optional app description')    
-    
+        
     # Required positional argument
     parser.add_argument('--circuit_type', type=str, nargs='?')
     parser.add_argument('--circuit_size', type=int, nargs='?')
@@ -51,7 +51,7 @@ if __name__ == "__main__":
             "max_subcircuit_cuts": 100,
             "subcircuit_size_imbalance": 2,
             "max_cuts": 10,
-            "num_subcircuits": np.arange (1, 100)
+            "num_subcircuits": [2, 3, 4, 5, 6],
         },
         verbose=verbose,
     )

@@ -1,5 +1,5 @@
-import argparse
 import os
+import argparse
 import torch.distributed as dist
 from datetime import timedelta
 from cutqc.main import CutQC
@@ -11,7 +11,7 @@ WORLD_SIZE = int(os.environ["WORLD_SIZE"])
 LOCAL_RANK = WORLD_RANK - gpus_per_node * (WORLD_RANK // gpus_per_node)
 MASTER_RANK = 0
 
-def write_results(dirname, filename, results):
+def write_results (dirname, filename, results):
     '''
     Write results to output file
     '''
@@ -33,14 +33,15 @@ def run(args):
     )
 
     compute_time = cutqc.build(mem_limit=32, recursion_depth=1)
-    # approximation_error = cutqc.verify()
 
+    approximation_error = cutqc.verify()
+    approximation_error = None
     # Define the path for the output text file
     dirname = "data_measurements"
-    filename = "{}_{}_nodes{}".format(filename, args.backend, WORLD_SIZE)
-    write_results(dirname, filename, (compute_time))
-    cutqc.destroy_distributed()
-
+    filename = "{}_{}_nodes{}_v2".format(filename, args.backend, WORLD_SIZE)
+    write_results (dirname, filename, (compute_time, approximation_error))    
+    cutqc.destroy_distributed ()
+          
 def init_processes(args):
     dist.init_process_group(args.backend, rank=WORLD_RANK, world_size=WORLD_SIZE, timeout=timedelta(hours=1))
     print("Hello world! This is worker: {}. I have {} siblings!".format(dist.get_rank(), dist.get_world_size()))
@@ -55,7 +56,6 @@ if __name__ == "__main__":
     parser.add_argument('--circuit_size', type=int, required=True, help='Size of the circuit')
     parser.add_argument('--max_subcircuit_width', type=int, required=True, help='Maximum subcircuit width')
     parser.add_argument('--backend', type=str, required=True, help='Backend for torch.distributed')
-
     args = parser.parse_args()
 
     print(f"args.backend: {args.backend}")
