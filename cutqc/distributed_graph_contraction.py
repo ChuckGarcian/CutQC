@@ -176,7 +176,7 @@ class DistributedGraphContractor(AbstractGraphContractor):
 
     def _initiate_worker_loop(self):
         """
-        Primary worker loop.
+        Primary worker kernel
 
         Each worker receives a portion of the workload from the host/master node.
         Once done with computation, all nodes perform a collective reduction
@@ -186,31 +186,69 @@ class DistributedGraphContractor(AbstractGraphContractor):
         from pprint import pprint
         
         while True:
-            torch.cuda.device(self.compute_device)
-            num_batches, batch, tensor_sizes = self._receive_from_host()        
-            
-            # Ensure Enough Size
-            gpu_free = torch.cuda.mem_get_info()[0]
-            batch_mem_size = batch.element_size() * torch.prod(tensor_sizes) * num_batches 
-            assert (batch_mem_size < gpu_free), ValueError ("Error 2006: Batch of size {}, to large for GPU device of size {}".format (batch_mem_size, gpu_free))
-                                
-            # Execute kronecker products in parallel (vectorization)                    
-            torch.cuda.memory._record_memory_history()            
-            lambda_fn = lambda x: compute_kronecker_product(x, tensor_sizes)
-            vec_fn = torch.func.vmap(lambda_fn)
-            res = vec_fn(batch)
-            torch.cuda.memory._dump_snapshot("compute_snap.pickle")        
-            
-            del (batch)
-            res = res.sum(dim=0)
-            
+            with torch.no_grad():  # Disable gradient computation if not needed               
+                torch.cuda.device(self.compute_device)
+                num_samples, batch, tensor_sizes = self._receive_from_host()                        
+                SAFETY_MARGIN = 7e9  # 1 GB safety margin
+
+                # Get available GPU memory
+                gpu_free, _ = torch.cuda.mem_get_info()
+                gpu_free -= SAFETY_MARGIN  # Leave some safety margin
+
+                # Calculate memory requirements
+                element_size = batch.element_size()
+                total_N_elements = torch.prod(tensor_sizes)
+                single_sample_size = element_size * total_N_elements
+
+                # Calculate maximum number of samples that fit in GPU memory
+                max_tile_size = gpu_free // single_sample_size
+
+                # If even a single item doesn't fit, raise an error
+                if max_tile_size == 0:
+                    raise ValueError("Error 2006: Not enough GPU memory to process even a single kronecker sample")
+
+                # Calculate number of tiles 
+                import math
+                N_tiles = math.ceil(num_samples / max_tile_size)
+
+                print(f"Processing in {N_tiles} tiles, max batch size: {max_tile_size}")
+
+                # Prepare vectorized function
+                vec_fn = torch.func.vmap(lambda x: compute_kronecker_product(x, tensor_sizes))
+
+                # Process in tiles
+                result = None
+                curr_idx = 0
+                
+                for i in range(N_tiles):
+                    # Stride by tiles
+                    print ("index: {}".format (i), flush=True)
+                    
+                    delta = int(min ((num_samples - curr_idx), max_tile_size))                  
+                    tile = batch[:delta]  # Get current tile 
+                    batch = batch[delta:] # next tile
+                    curr_idx += delta
+
+                    tile_result = vec_fn(tile).sum(dim=0)                    
+                    
+                    if result is None:
+                        result = tile_result
+                    else:
+                        result.add(tile_result)
+                    
+                    # Clear cache after each processed tile
+                    del tile
+                    del tile_result
+                    torch.cuda.empty_cache()
+
             # Send Back to host
-            dist.reduce(res.to(self.mp_backend), dst=__host_machine__, op=dist.ReduceOp.SUM)
+            dist.reduce(result.to(self.mp_backend), dst=__host_machine__, op=dist.ReduceOp.SUM)
             
 
 from functools import reduce
 def compute_kronecker_product(flattened: torch.Tensor, sizes: torch.Tensor) -> torch.Tensor:
     """
+    Micro_kernel:
     Computes sequence of Kronecker products, where operands are tensors in 'components'.
     """
     tensors = torch.split(flattened, tuple(sizes))

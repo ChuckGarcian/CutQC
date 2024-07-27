@@ -8,7 +8,7 @@ from helper_functions.conversions import quasi_to_real
 from helper_functions.metrics import MSE
 
 from cutqc.evaluator import get_num_workers
-from cutqc.graph_contraction import GraphContractor
+# from cutqc.graph_contraction import GraphContractor
 from cutqc.distributed_graph_contraction import DistributedGraphContractor
 from cutqc.helper_fun import add_times
 from cutqc.post_process_helper import get_reconstruction_qubit_order
@@ -100,6 +100,8 @@ class DynamicDefinition(object):
                 bin_indices = np.argpartition(
                     reconstructed_prob, -self.recursion_depth
                 )[-self.recursion_depth :]
+                print ("bin incides {}".format (bin_indices))
+                print ("bin incides {}".format (len(bin_indices)))
                 for bin_id in bin_indices:
                     if reconstructed_prob[bin_id] > 1 / 2**num_qubits / 10:
                         largest_bins.append(

@@ -29,4 +29,4 @@ module load gurobi/10.0.1
 export PYTHONPATH=/usr/licensed/gurobi/10.0.1/linux64/lib/python3.8_utf32
 
 python cut_and_eval.py  {circuit_type}  {circuit_size} {max_subcircuit_width} 
-srun python dist_run.py {circuit_type}  {circuit_size} {max_subcircuit_width} {backend}
+srun python dist_run.py {circuit_type}  {circuit_size} {max_subcircuit_width} {comm_backend} {compute_backend} 

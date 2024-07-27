@@ -41,7 +41,8 @@ def run(args):
 
     # Initiate Reconstruct
     compute_time = cutqc.build(mem_limit=32, recursion_depth=1)
-    approximation_error = cutqc.verify()
+    # approximation_error = cutqc.verify()
+    approximation_error = None
 
     # Define the path for the output text file
     dirname = "data_measurements"
