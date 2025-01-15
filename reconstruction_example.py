@@ -1,6 +1,7 @@
-# Title: dist_driver.py
-# Description: Example of how CutQC can be used to effececiently reconstruct 
-# subcircuits
+'''
+Title: dist_driver.py
+Description: Example of how CutQC can be used to efficiently reconstruct subcircuits
+'''
 
 import os
 from cutqc.main import CutQC 

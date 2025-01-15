@@ -32,6 +32,7 @@ class CutQC:
                  load_data=None, 
                  compute_backend='gpu', 
                  comm_backend = 'nccl',
+                 timeout=1,
                  gpus_per_node = None,
                  world_rank = None,
                  world_size = None, 
@@ -49,7 +50,8 @@ class CutQC:
         --- Distributed Reconstruction Related Arguments ---          
         
         pytorch_distributed (Optional): When set to 'True', reconstruction 
-                is executed distributed. Default FALSE
+                is executed distributed using pytorch. Otherwise when 'False', 
+                framework used in Tensorflow, single node. Default FALSE.
         
         reconstruct_only (Optional): When enabled, cutqc performs only reconstructions. 
                           Executing with Pytorch requires that this be 'TRUE'.
@@ -61,6 +63,7 @@ class CutQC:
         compute_backend (Optional): Compute processing device used if 
                                     pytorch_distributed is set to 'TRUE'. 
                                     'cpu' for cpu and 'gpu' for gpu. Default GPU
+        timeout (Optional): Integer bounded wait time to prevent deadlock between nodes.                                   
 
         comm_backend (Optional): message passing backend internally used by pytorch for 
                                  sending data between nodes. Default NCCL.
@@ -70,7 +73,7 @@ class CutQC:
         world_size (Optional):   Total number of nodes
         
         """
-        assert not (pytorch_distributed is False and reconstruct_only is True), "Using pytorch is not available for cutting, since worker nodes are being concurrently initialized."
+        assert not (pytorch_distributed is False and reconstruct_only is True), "Executing with pytorch requires 'reconstruct_only' be true."
         
         self.name = name
         self.circuit = circuit
@@ -89,19 +92,19 @@ class CutQC:
                 
         if reconstruct_only:
             # Multi node - Pytorch Version
-            if pytorch_distributed:                
-                self.compute_backend = compute_backend
-                self._setup_for_dist_reconstruction (load_data, comm_backend, world_rank, world_size, gpus_per_node)
-            
-            # Single node - Tensorflow Version
-            else:
-                self._load_data(load_data)
+          if pytorch_distributed:                
+              self.compute_backend = compute_backend
+              self._setup_for_dist_reconstruction (load_data, comm_backend, world_rank, world_size, gpus_per_node, timeout)
+          
+          # Single node - Tensorflow Version
+          else:
+              self._load_data(load_data)
         
         elif not reconstruct_only: 
             # Cutting, evaluation and reconstruction are occurring all at once.
             self._initialize_for_serial_reconstruction(circuit)    
             
-    def _setup_for_dist_reconstruction (self, load_data, comm_backend: str, world_rank: int, world_size: int, gpus_per_node: int, timeout=1):
+    def _setup_for_dist_reconstruction (self, load_data, comm_backend: str, world_rank: int, world_size: int, gpus_per_node: int, timeout: int):
         """
         Sets up to call the distributed kernel. Worker nodes 
         
@@ -113,7 +116,7 @@ class CutQC:
             timeout:      Max amount of time pytorch will let any one node wait on 
                         a message before killing it.
         """
-        
+        # GPU identifer on local compute cluster 
         self.local_rank = world_rank - gpus_per_node * (world_rank // gpus_per_node)                
         self.pytorch_distributed = True
         timelimit = timedelta(hours=timeout)  # Bounded wait time to prevent deadlock

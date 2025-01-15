@@ -1,6 +1,8 @@
-# Title: cut_and_eval.py
-# Description: Example of how to cut and evaluate for the purposes of 
-# distributed reconstruction
+'''
+Title: cut_and_eval.py
+Description: Example of how to cut and evaluate for the purposes of 
+distributed reconstruction
+'''
 
 import os, logging
 
