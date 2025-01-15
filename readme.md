@@ -33,15 +33,6 @@ pip install -r requirements.txt
 
 > Note on Qiskit Version: If you get warnings about conditionals '==' and 'is', switching to qiskit==0.45.2 may fix the issue.
 
-## General Example Code
-For an example, run:
-```
-python example.py
-```
-This runs an example 16-qubit supremacy circuit.
-The output qubits are in a scrambled order based on the subcircuit post-processing sequence.
-A function that converts an arbitrary state of interest to the original order will be added.
-
 ## Example Reconstruction
 See `explaning_example.md` for running the example scripts. 
 
