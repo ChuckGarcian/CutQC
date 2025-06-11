@@ -24,8 +24,8 @@ echo "WORLD_SIZE="$WORLD_SIZE
 # Load Modules
 module purge
 module load anaconda3/2024.2
-conda activate cutqc
-module load gurobi/10.0.1
-export PYTHONPATH=/usr/licensed/gurobi/10.0.1/linux64/lib/python3.8_utf32
+conda activate CutQCSummer2025
+module load gurobi/12.0.0
 
 srun python reconstruction_example.py
+
