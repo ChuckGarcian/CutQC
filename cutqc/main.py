@@ -4,7 +4,7 @@ from time import perf_counter
 
 from cutqc.helper_fun import check_valid, add_times
 from cutqc.cutter import find_cuts
-from cutqc.evaluator import run_subcircuit_instances, attribute_shots
+from cutqc.evaluator import run_subcircuit_instances, run_subcircuit_instances2, attribute_shots, attribute_shots2
 from cutqc.post_process_helper import (
     generate_subcircuit_entries,
     generate_compute_graph,
@@ -13,6 +13,10 @@ from cutqc.dynamic_definition import DynamicDefinition, full_verify
 
 from datetime import timedelta
 import torch.distributed as dist
+
+from pathlib import Path
+from typing import Optional
+import tarfile
 
 __host_machine__ = 0
 
@@ -202,6 +206,9 @@ class CutQC:
         evaluate_begin = perf_counter()
         self._run_subcircuits()
         self._attribute_shots()
+        
+        ## This is the place the cutqcmodel needs to return 
+        self._create_CutQCModel ()
         self.times["evaluate"] = perf_counter() - evaluate_begin
         if self.verbose:
             print("evaluate took %e seconds" % self.times["evaluate"])
@@ -240,12 +247,54 @@ class CutQC:
 
         return self.dd.graph_contractor.times["compute"]
 
-    def save_eval_data (self, foldername: str) -> None:
+
+    def write_to_csv(self, file_path, data_instances):
+        import csv
+        
+        with open(file_path, mode='w', newline='') as file:
+            writer = csv.writer(file)
+
+            # Write header
+            writer.writerow(data_instances[0].__annotations__.keys())
+
+            # Write data
+            for instance in data_instances:
+                writer.writerow(instance.__dict__.values())
+
+
+    def save_cutqc_obj (self, filename : Optional[str] = "cutqc_circuit") -> None:
         '''
-        Saves subcircuit evaluation data which can be used in a future 
-        instance of `cutqc` for reconstruction.
+        Saves CutQC instance as the pickle file 'FILENAME'
         '''
-        subprocess.run(["cp", "-r", self.tmp_data_folder, foldername])
+        print ("Saving file now!")
+        print ("Saving file now!")
+        from cutqc.cutqc_dataclass import AuxData
+        # Circuit information used to reconstruct subcircuit_entries and verification
+        csv_path = Path.cwd()        
+        csv_path = Path.joinpath(csv_path, "aux_meta_data.pkl")
+        
+        aux_meta_data = AuxData (self.compute_graph, self.complete_path_map, self.circuit, self.circuit.num_qubits, "Hello")
+        
+        with open(csv_path, 'wb') as outp:  # Overwrites any existing file.
+          pickle.dump(aux_meta_data, outp, pickle.HIGHEST_PROTOCOL)
+        
+        
+        
+        exit ()
+
+        #open file in write mode
+        filename = "{}.tar".format(filename)
+
+        file_obj= tarfile.open(filename,"w")        
+        source_path = Path(self.tmp_data_folder)
+        
+        for file_path in source_path.rglob('*'):
+            if file_path.is_file():                                
+                print ("file_path: {}".format(file_path))
+                file_obj.add (file_path)                            
+
+        #close file
+        file_obj.close()              
     
     def verify(self):
         verify_begin = perf_counter()
@@ -259,14 +308,9 @@ class CutQC:
         print (f"Approximate Error: {self.approximation_error}")
         print("verify took %.3f" % (perf_counter() - verify_begin))
         return self.approximation_error
-
-    def save_cutqc_obj (self, filename : str) -> None:
-        '''
-        Saves CutQC instance as the pickle file 'FILENAME'
-        '''
-        with open (filename, 'wb') as outp:
-            pickle.dump(self, outp, pickle.HIGHEST_PROTOCOL)
-    
+  
+  
+        
     def clean_data(self):
         subprocess.run(["rm", "-r", self.tmp_data_folder])
 
@@ -276,7 +320,9 @@ class CutQC:
             subcircuits=self.subcircuits,
             complete_path_map=self.complete_path_map,
         )
-
+        import pprint
+        pprint.pprint(vars(self.compute_graph))
+        
         (
             self.subcircuit_entries,
             self.subcircuit_instances,
@@ -300,13 +346,64 @@ class CutQC:
             subprocess.run(["rm", "-r", self.tmp_data_folder])
         os.makedirs(self.tmp_data_folder)
         
-        run_subcircuit_instances (
+        prob_dict_2 = run_subcircuit_instances2 (
             subcircuits=self.subcircuits,
             subcircuit_instances=self.subcircuit_instances,
             eval_mode=self.eval_mode,
             num_shots_fn=self.num_shots_fn,
             data_folder=self.tmp_data_folder,
         )
+        self.instance_init_meas_ids = {}
+        
+        prob_dict_1, self.instance_init_meas_ids = run_subcircuit_instances (
+            subcircuits=self.subcircuits,
+            subcircuit_instances=self.subcircuit_instances,
+            eval_mode=self.eval_mode,
+            num_shots_fn=self.num_shots_fn,
+            data_folder=self.tmp_data_folder,
+        )
+        
+        self.prob_dict = prob_dict_1
+        return 0
+        
+        # Compare the two dictionaries
+        print("Comparing prob_dict_1 and prob_dict_2...")
+        
+        # Check if keys are the same
+        keys_match = set(prob_dict_1.keys()) == set(prob_dict_2.keys())
+        print(f"Keys match: {keys_match}")
+        
+        if not keys_match:
+            print(f"Keys in dict_1 only: {set(prob_dict_1.keys()) - set(prob_dict_2.keys())}")
+            print(f"Keys in dict_2 only: {set(prob_dict_2.keys()) - set(prob_dict_1.keys())}")
+        
+        exit ()
+        # Compare values for matching keys
+        matching_values = 0
+        total_keys = 0
+        for key in prob_dict_2.keys():
+            if key in prob_dict_1:
+                total_keys += 1
+                print ("type(){}".format (type(prob_dict_1[key])))
+                print (prob_dict_1[key])
+                print (prob_dict_2[key])
+                
+                import numpy as np
+                # Check if the numpy arrays are equal
+                if np.array_equal(prob_dict_1[key], prob_dict_2[key]):
+                    matching_values += 1
+                    print("Arrays are equal")
+                else:
+                    print("Arrays are NOT equal")
+                    exit ()
+                
+                
+        exit ()
+        
+        print(f"Matching values: {matching_values}/{total_keys}")
+        print(f"Dictionaries are {'identical' if prob_dict_1 == prob_dict_2 else 'different'}")
+        
+        # exit ()
 
     def _attribute_shots(self):
         """
@@ -315,12 +412,62 @@ class CutQC:
         """
         if self.verbose:
             print("--> Attribute shots %s" % self.name)
-        attribute_shots(
+        
+        prob_dict_1 =attribute_shots(
             subcircuit_entries=self.subcircuit_entries,
             subcircuits=self.subcircuits,
             eval_mode=self.eval_mode,
-            data_folder=self.tmp_data_folder,
+            instance_init_meas_ids=self.instance_init_meas_ids,
+            prob_dict=self.prob_dict,
+            num_workers=20
         )
+        
+        prob_dict_2= attribute_shots2(
+            subcircuit_entries=self.subcircuit_entries,
+            subcircuits=self.subcircuits,
+            eval_mode=self.eval_mode,
+            data_folder=self.tmp_data_folder            
+        )
+        
         subprocess.call(
             "rm %s/subcircuit*instance*.pckl" % self.tmp_data_folder, shell=True
         )
+        
+        self.attributed_shots = prob_dict_1
+        return 0
+        print ("Done testing breh")
+        # Compare the two dictionaries
+        print("Comparing prob_dict_1 and prob_dict_2...")
+        
+        # Check if keys are the same
+        keys_match = set(prob_dict_1.keys()) == set(prob_dict_2.keys())
+        print(f"Keys match: {keys_match}")
+        
+        if not keys_match:
+            print(f"Keys in dict_1 only: {set(prob_dict_1.keys()) - set(prob_dict_2.keys())}")
+            print(f"Keys in dict_2 only: {set(prob_dict_2.keys()) - set(prob_dict_1.keys())}")
+        print (prob_dict_2.keys())
+        exit ()
+        # Compare values for matching keys
+        matching_values = 0
+        total_keys = 0
+        for key in prob_dict_2.keys():
+            if key in prob_dict_1:
+                total_keys += 1
+                print ("type(){}".format (type(prob_dict_1[key])))
+                print (prob_dict_1[key])
+                print (prob_dict_2[key])
+                
+                import numpy as np
+                # Check if the numpy arrays are equal
+                if np.array_equal(prob_dict_1[key], prob_dict_2[key]):
+                    matching_values += 1
+                    print("Arrays are equal")
+                else:
+                    print("Arrays are NOT equal")
+                    exit ()
+                    
+                
+                
+        exit ()
+        exit ()

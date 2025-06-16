@@ -29,8 +29,13 @@ if __name__ == "__main__":
     num_shots = num_shots_fn(subcircuit) if num_shots_fn is not None else None
 
     for instance_init_meas in rank_jobs:
+        print ("In worker")
+        print (instance_init_meas[0])
+        
+        
         if "Z" in instance_init_meas[1]:
             continue
+
         subcircuit_instance = modify_subcircuit_instance(
             subcircuit=subcircuit,
             init=instance_init_meas[0],
@@ -55,10 +60,18 @@ if __name__ == "__main__":
             measured_prob = measure_prob(
                 unmeasured_prob=subcircuit_inst_prob, meas=meas
             )
+            print ("instanmea[0]: {}".format(instance_init_meas[0]))
+            print ("meas{}".format(meas))
+            print ("measidsworker keys: {}".format (instance_init_meas_ids.keys()))
+            
             instance_init_meas_id = instance_init_meas_ids[
                 (instance_init_meas[0], meas)
             ]
-            # print('%s --> rank %d writing subcircuit_%d_instance_%d'%(args.data_folder,args.rank,subcircuit_idx,instance_init_meas_id))
+            print('%s --> rank %d writing subcircuit_%d_instance_%d'%(args.data_folder,args.rank,subcircuit_idx,instance_init_meas_id))
+            print ((instance_init_meas[0], meas))
+            print (type (instance_init_meas))
+            print (type(rank_jobs))
+            
             pickle.dump(
                 measured_prob,
                 open(
