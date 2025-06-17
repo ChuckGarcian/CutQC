@@ -305,11 +305,11 @@ def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_me
         for key in subcircuit_entries[subcircuit_idx]:
             entry_init_meas_ids[subcircuit_idx][key] = i
             i += 1
-        jobs = scrambled(list(subcircuit_entries[subcircuit_idx].keys()))
+        jobs = list(subcircuit_entries[subcircuit_idx].keys())
         
   
         subcircuit = subcircuits[subcircuit_idx]
-        entry_init_meas_ids = entry_init_meas_ids[subcircuit_idx]
+        
         
         # rank_jobs = pickle.load(
         #     open("%s/rank_%d.pckl" % (args.data_folder, args.rank), "rb")
@@ -336,13 +336,27 @@ def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_me
                         subcircuit_entry_prob += coefficient * subcircuit_instance_prob
             else:
                 subcircuit_entry_prob = uniform_p
-            entry_init_meas_id = entry_init_meas_ids[subcircuit_entry_init_meas]
+            entry_init_meas_id = entry_init_meas_ids[subcircuit_idx][subcircuit_entry_init_meas]
             # print('%s --> rank %d writing subcircuit_%d_entry_%d'%(args.data_folder,args.rank,subcircuit_idx,entry_init_meas_id))
             entry_probabilities[(subcircuit_idx, entry_init_meas_id)] = subcircuit_entry_prob
     print ("Printing single threaded version")
-    print (entry_probabilities)
-    return entry_probabilities
-            
+    print (type (entry_probabilities)    )
+    print(type(entry_probabilities))
+
+    # Get a sample key and value
+    sample_key = next(iter(entry_probabilities.keys()))
+    sample_value = next(iter(entry_probabilities.values()))
+    
+    print(f"Key type: {type(sample_key)}")
+    print(f"Value type: {type(sample_value)}")
+    
+    # Or check all key/value types if you want to be thorough
+    print("All key types:", {type(k) for k in entry_probabilities.keys()})
+    print("All value types:", {type(v) for v in entry_probabilities.values()})
+    exit ()
+    return entry_probabilities, entry_init_meas_ids
+
+
 
 
 def attribute_shots2(subcircuit_entries, subcircuits, eval_mode, data_folder):

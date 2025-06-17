@@ -208,7 +208,7 @@ class CutQC:
         self._attribute_shots()
         
         ## This is the place the cutqcmodel needs to return 
-        self._create_CutQCModel ()
+        # self._create_CutQCModel ()
         self.times["evaluate"] = perf_counter() - evaluate_begin
         if self.verbose:
             print("evaluate took %e seconds" % self.times["evaluate"])
@@ -224,6 +224,8 @@ class CutQC:
         
         self.dd = DynamicDefinition(
             compute_graph=self.compute_graph,
+            attributed_shots = self.attributed_shots,
+            entry_init_meas_ids= self.entry_init_meas_ids,
             data_folder=self.tmp_data_folder,
             num_cuts=self.num_cuts,
             mem_limit=mem_limit,
@@ -277,7 +279,6 @@ class CutQC:
         
         with open(csv_path, 'wb') as outp:  # Overwrites any existing file.
           pickle.dump(aux_meta_data, outp, pickle.HIGHEST_PROTOCOL)
-        
         
         
         exit ()
@@ -413,7 +414,8 @@ class CutQC:
         if self.verbose:
             print("--> Attribute shots %s" % self.name)
         
-        prob_dict_1 =attribute_shots(
+        self.entry_init_meas_ids = {}
+        prob_dict_1, self.entry_init_meas_ids  = attribute_shots(
             subcircuit_entries=self.subcircuit_entries,
             subcircuits=self.subcircuits,
             eval_mode=self.eval_mode,
@@ -422,6 +424,7 @@ class CutQC:
             num_workers=20
         )
         
+      
         prob_dict_2= attribute_shots2(
             subcircuit_entries=self.subcircuit_entries,
             subcircuits=self.subcircuits,
