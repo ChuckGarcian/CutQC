@@ -2,7 +2,7 @@ import itertools, copy, pickle, subprocess
 from time import perf_counter
 import numpy as np
 import torch
-
+from typing import Dict
 from helper_functions.non_ibmq_functions import evaluate_circ, find_process_jobs
 from helper_functions.conversions import quasi_to_real
 from helper_functions.metrics import MSE
@@ -15,12 +15,16 @@ from cutqc.post_process_helper import get_reconstruction_qubit_order
 from cutqc.graph_contraction import GraphContractor
 
 import torch.distributed as dist
+from cutqc.post_process_helper import ComputeGraph
 
-
+from cutqc.post_process_helper import ComputeGraph
 
 def merge_prob_vector(unmerged_prob_vector, qubit_states):
     num_active = qubit_states.count("active")
     num_merged = qubit_states.count("merged")
+    print ("Numactive: {}".format(qubit_states))
+    print ("Numamerged: {}".format(num_merged))
+    
     merged_prob_vector = np.zeros(2**num_active, dtype="float32")
     # print('merging with qubit states {}. {:d}-->{:d}'.format(
     #     qubit_states,
@@ -34,7 +38,11 @@ def merge_prob_vector(unmerged_prob_vector, qubit_states):
             active_ptr = 0
             merged_ptr = 0
             binary_state_id = ""
+
+
+
             for qubit_state in qubit_states:
+                
                 if qubit_state == "active":
                     binary_state_id += active_qubit_states[active_ptr]
                     active_ptr += 1
@@ -43,19 +51,42 @@ def merge_prob_vector(unmerged_prob_vector, qubit_states):
                     merged_ptr += 1
                 else:
                     binary_state_id += "%s" % qubit_state
+            print (binary_state_id)
+            
+
             state_id = int(binary_state_id, 2)
             merged_prob_vector[merged_bin_id] += unmerged_prob_vector[state_id]
+            
     return merged_prob_vector
+from dataclasses import dataclass
+
+@dataclass
+class CutQCModel ():
+    compute_graph: ComputeGraph
+    attributed_shots: Dict[tuple, np.ndarray]
+    entry_init_meas_ids: Dict[int, Dict[tuple, int]]
+    num_cuts: int
+    # This is automatically generated:
+    def __init__(self, compute_graph: ComputeGraph, attributed_shots: Dict[tuple, np.ndarray], 
+                entry_init_meas_ids: Dict[int, Dict[tuple, int]], num_cuts: int):
+        print ("In cutqcModel")
+        print (compute_graph.nodes)
+        
+        self.compute_graph = compute_graph
+        self.attributed_shots = attributed_shots
+        self.entry_init_meas_ids = entry_init_meas_ids
+        self.num_cuts = num_cuts
+      
 
 class DynamicDefinition(object):
     def __init__(
-        self, compute_graph, attributed_shots, entry_init_meas_ids, data_folder, num_cuts, mem_limit, recursion_depth, pytorch_distributed=False, local_rank=None, compute_backend='gpu'
+        self, cutqc_model:CutQCModel, compute_graph, attributed_shots: Dict, entry_init_meas_ids, data_folder, num_cuts, mem_limit, recursion_depth, pytorch_distributed=False, local_rank=None, compute_backend='gpu'
     ) -> None:
         super().__init__()
         self.compute_graph = compute_graph
-        self.attributed_shots = attributed_shots,
-        self.entry_init_meas_ids = entry_init_meas_ids
-        self.num_cuts = num_cuts
+        # self.attributed_shots = attributed_shots,
+        # self.entry_init_meas_ids = entry_init_meas_ids
+        # self.num_cuts = num_cuts
         self.mem_limit = mem_limit
         self.recursion_depth = recursion_depth
         self.dd_bins = {}
@@ -63,7 +94,7 @@ class DynamicDefinition(object):
         self.local_rank = local_rank
         self.graph_contractor = DistributedGraphContractor (local_rank=self.local_rank, compute_backend=compute_backend) if (pytorch_distributed) else GraphContractor()
         self.pytorch_distributed = pytorch_distributed
-
+        self.cutqc_model = cutqc_model
         self.overhead = {"additions": 0, "multiplications": 0}
         self.times = {"get_dd_schedule": 0, "merge_states_into_bins": 0, "sort": 0}
     
@@ -165,12 +196,7 @@ class DynamicDefinition(object):
                 dd_bins[recursion_layer] =  {'subcircuit_state','upper_bin'}
         subcircuit_state[subcircuit_idx] = ['0','1','active','merged']
         """
-        num_qubits = sum(
-            [
-                self.compute_graph.nodes[subcircuit_idx]["effective"]
-                for subcircuit_idx in self.compute_graph.nodes
-            ]
-        )
+  
         largest_bins = []  # [{recursion_layer, bin_id}]
         recursion_layer = 0
 
@@ -188,18 +214,18 @@ class DynamicDefinition(object):
                     recursion_layer=bin_to_expand["recursion_layer"],
                     bin_id=bin_to_expand["bin_id"],
                 )
+                
+                
 
             self.times["get_dd_schedule"] += perf_counter() - get_dd_schedule_begin
-            merged_subcircuit_entry_probs = self.merge_states_into_bins(dd_schedule, self.entry_init_meas_ids, self.attributed_shots)          
-            exit ()
+            merged_subcircuit_entry_probs = self.merge_states_into_bins_custom(dd_schedule=dd_schedule)
+                    
             """ Build from the merged subcircuit entries """
             reconstructed_prob = self.graph_contractor.reconstruct (
-                compute_graph=self.compute_graph,
+                compute_graph=self.cutqc_model.compute_graph,
                 subcircuit_entry_probs=merged_subcircuit_entry_probs,
-                num_cuts=self.num_cuts                
-                )
-        
-            
+                num_cuts=self.cutqc_model.num_cuts)
+                                    
             smart_order = self.graph_contractor.smart_order
             recursion_overhead = self.graph_contractor.overhead
             self.overhead["additions"] += recursion_overhead["additions"]
@@ -256,6 +282,8 @@ class DynamicDefinition(object):
         subcircuit_active_qubits = self.distribute_load(
             capacities=subcircuit_capacities
         )
+        
+                
         # print('subcircuit_active_qubits:',subcircuit_active_qubits)
         for subcircuit_idx in subcircuit_active_qubits:
             num_zoomed = 0
@@ -265,9 +293,16 @@ class DynamicDefinition(object):
                 - num_zoomed
                 - num_active
             )
+            print ("subcircuit_idx: {}".format(subcircuit_idx))
+            print ("num_zoomed:{}".format(num_zoomed))
+            print("num_active: {}".format(num_active))
+            print("num_merged: {}".format(num_merged), end="\n\n")
             schedule["subcircuit_state"][subcircuit_idx] = [
                 "active" for _ in range(num_active)
             ] + ["merged" for _ in range(num_merged)]
+            
+
+
         return schedule
 
     def next_dynamic_definition_schedule(self, recursion_layer, bin_id):
@@ -338,7 +373,57 @@ class DynamicDefinition(object):
         assert total_load == 0
         return loads
 
-    def merge_states_into_bins(self, dd_schedule, entry_init_meas_ids, subcircuit_prob):
+    def merge_states_into_bins(self):
+          """
+          The first merge of subcircuit probs using the target number of bins
+          Saves the overhead of writing many states in the first SM recursion
+          """
+          begin = perf_counter()
+          meta_info = pickle.load(open("%s/meta_info.pckl" % (self.data_folder), "rb"))
+          num_entries = [
+              len(meta_info["entry_init_meas_ids"][subcircuit_idx])
+              for subcircuit_idx in self.compute_graph.nodes
+          ]
+          subcircuit_num_qubits = [
+              self.compute_graph.nodes[subcircuit_idx]["effective"]
+              for subcircuit_idx in self.compute_graph.nodes
+          ]
+          num_workers = get_num_workers(
+              num_jobs=max(num_entries),
+              ram_required_per_worker=2 ** max(subcircuit_num_qubits) * 4 / 1e9,
+          )
+          procs = []
+          print (num_workers)
+          
+          for rank in range(num_workers):
+              python_command = (
+                  "python -m cutqc.parallel_merge_probs --data_folder %s --rank %d --num_workers %d"
+                  % (self.data_folder, rank, num_workers)
+              )
+              proc = subprocess.Popen(python_command.split(" "))
+              procs.append(proc)
+          [proc.wait() for proc in procs]
+          merged_subcircuit_entry_probs = {}
+          for rank in range(num_workers):
+              rank_merged_subcircuit_entry_probs = pickle.load(
+                  open("%s/rank_%d_merged_entries.pckl" % (self.data_folder, rank), "rb")
+              )
+              for subcircuit_idx in rank_merged_subcircuit_entry_probs:
+                  if subcircuit_idx not in merged_subcircuit_entry_probs:
+                      merged_subcircuit_entry_probs[subcircuit_idx] = (
+                          rank_merged_subcircuit_entry_probs[subcircuit_idx]
+                      )
+                  else:
+                      merged_subcircuit_entry_probs[subcircuit_idx].update(
+                          rank_merged_subcircuit_entry_probs[subcircuit_idx]
+                      )
+              subprocess.run(
+                  ["rm", "%s/rank_%d_merged_entries.pckl" % (self.data_folder, rank)]
+              )
+          self.times["merge_states_into_bins"] += perf_counter() - begin
+          return merged_subcircuit_entry_probs
+
+    def merge_states_into_bins_custom(self, dd_schedule):
         """
         The first merge of subcircuit probs using the target number of bins
         Saves the overhead of writing many states in the first SM recursion
@@ -347,19 +432,18 @@ class DynamicDefinition(object):
             
 
         merged_subcircuit_entry_probs = {}
-        for subcircuit_idx in entry_init_meas_ids:            
+        for subcircuit_idx in self.cutqc_model.entry_init_meas_ids:            
             
             merged_subcircuit_entry_probs[subcircuit_idx] = {}
             
-            for subcircuit_entry_init_meas in list(entry_init_meas_ids[subcircuit_idx].keys()):
-                subcircuit_entry_id = entry_init_meas_ids[subcircuit_idx][
+            for subcircuit_entry_init_meas in list(self.cutqc_model.entry_init_meas_ids[subcircuit_idx].keys()):
+                subcircuit_entry_id = self.cutqc_model.entry_init_meas_ids[subcircuit_idx][
                     subcircuit_entry_init_meas
                 ]
-                print (type (subcircuit_prob))
-                unmerged_prob_vector = subcircuit_prob[(subcircuit_idx, subcircuit_entry_id)]                
+
                 
-                subcircuit_prob
-                
+                unmerged_prob_vector = self.cutqc_model.attributed_shots[(subcircuit_idx, subcircuit_entry_id)]                
+                                                
                 merged_subcircuit_entry_probs[subcircuit_idx][
                     subcircuit_entry_init_meas
                 ] = merge_prob_vector(

@@ -7,6 +7,9 @@ from helper_functions.non_ibmq_functions import find_process_jobs, scrambled
 def merge_prob_vector(unmerged_prob_vector, qubit_states):
     num_active = qubit_states.count("active")
     num_merged = qubit_states.count("merged")
+    print ("Numactive: {}".format(qubit_states))
+    print ("Numamerged: {}".format(num_merged))
+    
     merged_prob_vector = np.zeros(2**num_active, dtype="float32")
     # print('merging with qubit states {}. {:d}-->{:d}'.format(
     #     qubit_states,
@@ -20,7 +23,11 @@ def merge_prob_vector(unmerged_prob_vector, qubit_states):
             active_ptr = 0
             merged_ptr = 0
             binary_state_id = ""
+
+
+
             for qubit_state in qubit_states:
+                
                 if qubit_state == "active":
                     binary_state_id += active_qubit_states[active_ptr]
                     active_ptr += 1
@@ -29,9 +36,14 @@ def merge_prob_vector(unmerged_prob_vector, qubit_states):
                     merged_ptr += 1
                 else:
                     binary_state_id += "%s" % qubit_state
+            print (binary_state_id)
+            print ("Crashing")
+
             state_id = int(binary_state_id, 2)
             merged_prob_vector[merged_bin_id] += unmerged_prob_vector[state_id]
+            
     return merged_prob_vector
+from dataclasses import dataclass
 
 
 if __name__ == "__main__":
@@ -47,7 +59,7 @@ if __name__ == "__main__":
 
     meta_info = pickle.load(open("%s/meta_info.pckl" % (args.data_folder), "rb"))
     dd_schedule = pickle.load(open("%s/dd_schedule.pckl" % (args.data_folder), "rb"))
-
+    
     merged_subcircuit_entry_probs = {}
     for subcircuit_idx in meta_info["entry_init_meas_ids"]:
         rank_jobs = find_process_jobs(

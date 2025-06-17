@@ -26,11 +26,11 @@ def run_subcircuit_instances(
     runtime: for benchmarking, pseudo QPU backend generates uniform distribution
     """
     
-    print(f"subcircuits: {subcircuits}")
-    print(f"subcircuit_instances: {type(subcircuit_instances)}")
-    print(f"eval_mode: {eval_mode}")
-    print(f"num_shots_fn: {num_shots_fn}")
-    print(f"data_folder: {data_folder}")
+    # print(f"subcircuits: {subcircuits}")
+    # print(f"subcircuit_instances: {type(subcircuit_instances)}")
+    # print(f"eval_mode: {eval_mode}")
+    # print(f"num_shots_fn: {num_shots_fn}")
+    # print(f"data_folder: {data_folder}")
     
     # subicrcuit_instances: Combination of different measurment bases of the same subcircuit    
     #
@@ -42,7 +42,7 @@ def run_subcircuit_instances(
         jobs = subcircuit_instances[subcircuit_idx]
         instance_init_meas_ids[subcircuit_idx] = {jobs[i]: i for i in range(len(jobs))}                
         
-        print ("measids keys: {}".format (instance_init_meas_ids.keys()))
+
         
         # print (type(subcircuit_instances[subcircuit_idx]))
         # print (subcircuit_instances[subcircuit_idx])
@@ -54,8 +54,8 @@ def run_subcircuit_instances(
         from helper_functions.non_ibmq_functions import evaluate_circ
         
         for instance_init_meas in jobs:
-            print ("in main")
-            print(instance_init_meas[0])
+
+            
             
 
             if 'Z' in instance_init_meas[1]:
@@ -89,17 +89,14 @@ def run_subcircuit_instances(
                     unmeasured_prob=subcircuit_inst_prob, meas=meas
                 )
                 
-                # print ("main: instanmea[0]: {}".format(instance_init_meas[0]))
-                # print ("meas{}".format(meas))
-                # print ("measids keys: {}".format (instance_init_meas_ids.keys()))
                 
                 instance_init_meas_id = instance_init_meas_ids[subcircuit_idx][(instance_init_meas[0], meas)]                
                 
-                # print (measured_prob_dict[instance_init_meas_id])
-                # print ("chuckInstance_id: {}\ncircui_idx: {}".format(instance_init_meas_id, subcircuit_idx))
+                
+                
                 measured_prob_dict[(subcircuit_idx, instance_init_meas_id)] = measured_prob               
     
-    print (measured_prob_dict)
+
     return measured_prob_dict, instance_init_meas_ids
 
 def run_subcircuit_instances2(
@@ -167,8 +164,7 @@ def run_subcircuit_instances2(
                 measured_prob_dict[(subcircuit_idx, instance_id)] = pickle.load(f)               
                                     
     
-    print (measured_prob_dict)
-    print ("Done!")
+    
     return measured_prob_dict
    
 
@@ -265,7 +261,7 @@ def measure_prob(unmeasured_prob, meas):
         return unmeasured_prob
     else:
         measured_prob = np.zeros(int(2 ** meas.count("comp")))
-        # print('Measuring in',meas)
+        
         for full_state, p in enumerate(unmeasured_prob):
             sigma, effective_state = measure_state(full_state=full_state, meas=meas)
             measured_prob[effective_state] += sigma * p
@@ -339,21 +335,8 @@ def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_me
             entry_init_meas_id = entry_init_meas_ids[subcircuit_idx][subcircuit_entry_init_meas]
             # print('%s --> rank %d writing subcircuit_%d_entry_%d'%(args.data_folder,args.rank,subcircuit_idx,entry_init_meas_id))
             entry_probabilities[(subcircuit_idx, entry_init_meas_id)] = subcircuit_entry_prob
-    print ("Printing single threaded version")
-    print (type (entry_probabilities)    )
-    print(type(entry_probabilities))
+    
 
-    # Get a sample key and value
-    sample_key = next(iter(entry_probabilities.keys()))
-    sample_value = next(iter(entry_probabilities.values()))
-    
-    print(f"Key type: {type(sample_key)}")
-    print(f"Value type: {type(sample_value)}")
-    
-    # Or check all key/value types if you want to be thorough
-    print("All key types:", {type(k) for k in entry_probabilities.keys()})
-    print("All value types:", {type(v) for v in entry_probabilities.values()})
-    exit ()
     return entry_probabilities, entry_init_meas_ids
 
 

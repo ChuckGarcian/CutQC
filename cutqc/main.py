@@ -221,8 +221,11 @@ class CutQC:
             print("--> Build %s" % (self.name))
     
         # print ("self.pytorch_distributed': {}".format (self.pytorch_distributed))
+        from cutqc.dynamic_definition import CutQCModel
         
+        cutqc_model = CutQCModel (compute_graph=self.compute_graph, attributed_shots=self.attributed_shots, entry_init_meas_ids = self.entry_init_meas_ids, num_cuts=self.num_cuts)
         self.dd = DynamicDefinition(
+            cutqc_model=cutqc_model,
             compute_graph=self.compute_graph,
             attributed_shots = self.attributed_shots,
             entry_init_meas_ids= self.entry_init_meas_ids,
@@ -321,8 +324,7 @@ class CutQC:
             subcircuits=self.subcircuits,
             complete_path_map=self.complete_path_map,
         )
-        import pprint
-        pprint.pprint(vars(self.compute_graph))
+        import pprint    
         
         (
             self.subcircuit_entries,

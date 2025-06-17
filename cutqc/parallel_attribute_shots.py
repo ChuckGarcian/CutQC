@@ -40,8 +40,8 @@ if __name__ == "__main__":
                     )
                 )
                 
-                print (subcircuit_instance_prob)
-                print ("In attribute")
+                
+                
                 
                 if subcircuit_entry_prob is None:
                     subcircuit_entry_prob = coefficient * subcircuit_instance_prob
