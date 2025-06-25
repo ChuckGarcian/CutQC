@@ -1,10 +1,10 @@
-import subprocess, os
+import subprocess
+import os
 from time import perf_counter
 
 from cutqc.helper_fun import check_valid, add_times
 from cutqc.cutter import find_cuts
 from cutqc.post_process_helper import (
-    generate_subcircuit_entries,
     generate_compute_graph,
 )
 from cutqc_runtime.dynamic_definition import DynamicDefinition

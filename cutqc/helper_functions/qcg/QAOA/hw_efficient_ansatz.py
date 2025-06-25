@@ -1,4 +1,4 @@
-import sys, math
+import math
 import numpy as np
 from qiskit import QuantumCircuit, ClassicalRegister, QuantumRegister, QiskitError
 
@@ -50,7 +50,6 @@ class HWEA:
         measure=False,
         regname=None,
     ):
-
         # number of qubits
         self.nq = width
         # number of layers
@@ -104,7 +103,6 @@ class HWEA:
         return theta
 
     def get_random_theta(self):
-
         if self.parameters == "seeded":
             if self.seed is None:
                 raise Exception("A valid seed must be provided")

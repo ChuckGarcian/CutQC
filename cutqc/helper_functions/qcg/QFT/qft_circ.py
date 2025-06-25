@@ -1,5 +1,3 @@
-import sys
-import math
 import numpy as np
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 
@@ -54,7 +52,6 @@ class QFT:
         measure=False,
         regname=None,
     ):
-
         # number of qubits
         self.nq = width
         self.approximation_degree = approximation_degree

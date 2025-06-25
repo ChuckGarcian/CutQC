@@ -166,9 +166,9 @@ class DynamicDefinition(object):
                 next_dd_schedule["subcircuit_state"][subcircuit_idx]
             ):
                 if qubit_state == "merged" and num_active > 0:
-                    next_dd_schedule["subcircuit_state"][subcircuit_idx][
-                        qubit_ctr
-                    ] = "active"
+                    next_dd_schedule["subcircuit_state"][subcircuit_idx][qubit_ctr] = (
+                        "active"
+                    )
                     num_active -= 1
             assert num_active == 0
         return next_dd_schedule

@@ -1,7 +1,8 @@
 from qiskit import QuantumCircuit
 from qiskit.circuit.library import CPhaseGate, HGate, TGate, XGate, YGate, ZGate
 from qiskit.converters import circuit_to_dag, dag_to_circuit
-import random, itertools
+import random
+import itertools
 
 
 class RandomCircuit(object):

@@ -7,7 +7,7 @@ Based on the description given in Whitfield et al.
 (https://arxiv.org/abs/1001.3855?context=physics.chem-ph)
 
 Adapted from a Scaffold implementation by Pranav Gokhale]
-(https://github.com/epiqc/ScaffCC) 
+(https://github.com/epiqc/ScaffCC)
 
 NOTE:
 Qiskit orders their circuits increasing from top -> bottom
@@ -21,13 +21,12 @@ Both Whitfield et al. and Barkoutsos et al. order increasing from bottom -> top
   r 1 ---
   s 0 ---
 
-Not a problem. Qubit index is what matters. Set reverse_bits = True when 
+Not a problem. Qubit index is what matters. Set reverse_bits = True when
 drawing Qiskit circuit.
 
 """
 
 from qiskit import QuantumCircuit, QuantumRegister
-import sys
 import math
 import numpy as np
 
@@ -62,7 +61,6 @@ class UCCSD:
     def __init__(
         self, width, parameters="random", seed=None, barriers=False, regname=None
     ):
-
         # number of qubits
         self.nq = width
 
@@ -169,7 +167,6 @@ class UCCSD:
         qr = self.circ.qregs[0]
 
         for i in range(1, 9):
-
             if self.barriers:
                 self.circ.barrier(qr)
 
@@ -253,7 +250,6 @@ class UCCSD:
         numparam = int(num_dbl + num_sgl)
 
         if self.parameters == "random":
-
             param = np.random.uniform(-np.pi, np.pi, numparam)
 
         elif self.parameters == "seeded":

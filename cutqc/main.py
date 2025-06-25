@@ -1,46 +1,35 @@
-import subprocess, os
-import pickle
 from time import perf_counter
 
-from cutqc.helper_fun import check_valid, add_times
+from cutqc.cutqc_model import CutQCModel      
+
 from cutqc.cutter import find_cuts
-from cutqc.evaluator import run_subcircuit_instances, run_subcircuit_instances2, attribute_shots, attribute_shots2
+from cutqc.evaluator import (
+    run_subcircuit_instances,
+    attribute_shots,
+)
+
 from cutqc.post_process_helper import (
     generate_subcircuit_entries,
     generate_compute_graph,
 )
-from cutqc.dynamic_definition import DynamicDefinition, full_verify
 
-from datetime import timedelta
-import torch.distributed as dist
-
-from pathlib import Path
-from typing import Optional
-import tarfile
 
 __host_machine__ = 0
 
-class CutQC:
+
+class CircuitCutter:
     """
     The main module for CutQC
     cut --> evaluate results --> verify (optional)
     """
 
-    def __init__(self, 
-                 name=None, 
-                 circuit=None, 
-                 cutter_constraints=None, 
-                 verbose=False,              
-                 pytorch_distributed=False, 
-                 reconstruct_only=False, 
-                 load_data=None, 
-                 compute_backend='gpu', 
-                 comm_backend = 'nccl',
-                 timeout=1,
-                 gpus_per_node = None,
-                 world_rank = None,
-                 world_size = None, 
-                 ):
+    def __init__(
+        self,
+        name=None,
+        circuit=None,
+        cutter_constraints=None,
+        verbose=False,
+    ):
         """
         Args:
         name: name of the input quantum circuit
@@ -51,104 +40,18 @@ class CutQC:
                  Useful to visualize what happens,
                  but may produce very long outputs for complicated circuits.
 
-        --- Distributed Reconstruction Related Arguments ---          
-        
-        pytorch_distributed (Optional): When set to 'True', reconstruction 
-                is executed distributed using pytorch. Otherwise when 'False', 
-                framework used in Tensorflow, single node. Default FALSE.
-        
-        reconstruct_only (Optional): When enabled, cutqc performs only reconstructions. 
-                          Executing with Pytorch requires that this be 'TRUE'.
-                          Default FALSE
-        
-        load_data (Optional): String of file name to load subcircuits outputs 
-                        from a previous CutQC instance. Default None.
-
-        compute_backend (Optional): Compute processing device used if 
-                                    pytorch_distributed is set to 'TRUE'. 
-                                    'cpu' for cpu and 'gpu' for gpu. Default GPU
-        timeout (Optional): Integer bounded wait time to prevent deadlock between nodes.                                   
-
-        comm_backend (Optional): message passing backend internally used by pytorch for 
-                                 sending data between nodes. Default NCCL.
-        gpus_per_node (Optional): Number of GPUs per node in the case they are 
-                                  used as the compute backend.
-        world_rank (Optional):   Global Identifier. Default None.                       
-        world_size (Optional):   Total number of nodes
-        
         """
-        assert not (pytorch_distributed is False and reconstruct_only is True), "Executing with pytorch requires 'reconstruct_only' be true."
-        
         self.name = name
         self.circuit = circuit
-        self.cutter_constraints = cutter_constraints        
+        self.cutter_constraints = cutter_constraints
         self.verbose = verbose
         self.times = {}
-        
+
         self.compute_graph = None
         self.tmp_data_folder = None
         self.num_cuts = None
         self.complete_path_map = None
         self.subcircuits = None
-        self.local_rank = None
-        self.compute_backend = compute_backend
-        self.pytorch_distributed = pytorch_distributed
-                
-        if reconstruct_only:
-            # Multi node - Pytorch Version
-          if pytorch_distributed:                
-              self.compute_backend = compute_backend
-              self._setup_for_dist_reconstruction (load_data, comm_backend, world_rank, world_size, gpus_per_node, timeout)
-          
-          # Single node - Tensorflow Version
-          else:
-              self._load_data(load_data)
-        
-        elif not reconstruct_only: 
-            # Cutting, evaluation and reconstruction are occurring all at once.
-            self._initialize_for_serial_reconstruction(circuit)    
-            
-    def _setup_for_dist_reconstruction (self, load_data, comm_backend: str, world_rank: int, world_size: int, gpus_per_node: int, timeout: int):
-        """
-        Sets up to call the distributed kernel. Worker nodes 
-        
-        Args:
-            comm_backend: message passing backend internally used by pytorch for 
-                        sending data between nodes
-            world_rank:   Global Identifier                       
-            world_size:   Total number of nodes
-            timeout:      Max amount of time pytorch will let any one node wait on 
-                        a message before killing it.
-        """
-        # GPU identifer on local compute cluster 
-        self.local_rank = world_rank - gpus_per_node * (world_rank // gpus_per_node)                
-        self.pytorch_distributed = True
-        timelimit = timedelta(hours=timeout)  # Bounded wait time to prevent deadlock
-        
-        dist.init_process_group(comm_backend, rank=world_rank, world_size=world_size, timeout=timelimit) # 
-        
-        # Only host should load subcircuits data
-        if dist.get_rank() == __host_machine__:
-            # Todo: I think ideally the workers should on start load their own data
-            self._load_data(load_data)
-
-    def _load_data(self, load_data):
-        with open(load_data, 'rb') as inp:
-            loaded_cutqc = pickle.load(inp)
-            self.__dict__.update(vars(loaded_cutqc))
-
-    def _initialize_for_serial_reconstruction(self, circuit):
-        check_valid(circuit=circuit)
-        self.tmp_data_folder = "cutqc/tmp_data"
-        self._setup_tmp_folder()
-
-    def _setup_tmp_folder(self):
-        if os.path.exists(self.tmp_data_folder):
-            subprocess.run(["rm", "-r", self.tmp_data_folder])
-        os.makedirs(self.tmp_data_folder)
-    
-    def destroy_distributed (self):
-        self.dd.graph_contractor.terminate_distributed_process()
 
     def cut(self):
         """
@@ -184,10 +87,10 @@ class CutQC:
         )
         for field in cut_solution:
             self.__setattr__(field, cut_solution[field])
-        
+
         if "complete_path_map" in cut_solution:
             self.has_solution = True
-            self._generate_metadata ()
+            self._generate_metadata()
         else:
             self.has_solution = False
         self.times["cutter"] = perf_counter() - cutter_begin
@@ -206,117 +109,21 @@ class CutQC:
         evaluate_begin = perf_counter()
         self._run_subcircuits()
         self._attribute_shots()
-        
-        ## This is the place the cutqcmodel needs to return 
-        # self._create_CutQCModel ()
+
+        ## This is the place the cutqcmodel needs to return
         self.times["evaluate"] = perf_counter() - evaluate_begin
         if self.verbose:
             print("evaluate took %e seconds" % self.times["evaluate"])
-
-    def build(self, mem_limit, recursion_depth):
-        """
-        mem_limit: memory limit during post process. 2^mem_limit is the largest vector
-        """
-        if self.verbose:
-            print("--> Build %s" % (self.name))
-    
-        # print ("self.pytorch_distributed': {}".format (self.pytorch_distributed))
-        from cutqc.dynamic_definition import CutQCModel
         
-        cutqc_model = CutQCModel (compute_graph=self.compute_graph, attributed_shots=self.attributed_shots, entry_init_meas_ids = self.entry_init_meas_ids, num_cuts=self.num_cuts)
-        self.dd = DynamicDefinition(
-            cutqc_model=cutqc_model,
-            compute_graph=self.compute_graph,
-            attributed_shots = self.attributed_shots,
-            entry_init_meas_ids= self.entry_init_meas_ids,
-            data_folder=self.tmp_data_folder,
-            num_cuts=self.num_cuts,
-            mem_limit=mem_limit,
-            recursion_depth=recursion_depth,
-            pytorch_distributed=self.pytorch_distributed,
-            local_rank=self.local_rank,
-            compute_backend=self.compute_backend
+        return CutQCModel(
+            self.compute_graph,
+            self.complete_path_map,
+            self.attributed_shots,
+            self.entry_init_meas_ids,
+            self.num_cuts,
+            self.subcircuits,
+            self.circuit,
         )
-        self.dd.build ()
-
-        self.times = add_times(times_a=self.times, times_b=self.dd.times)
-        self.approximation_bins = self.dd.dd_bins
-        self.num_recursions = len(self.approximation_bins)
-        self.overhead = self.dd.overhead
-        # self.times["build"] = perf_counter() - build_begin
-        # self.times["build"] += self.times["cutter"]
-        # self.times["build"] -= self.times["merge_states_into_bins"]
-
-        if self.verbose:
-            print("Overhead = {}".format(self.overhead))
-
-        return self.dd.graph_contractor.times["compute"]
-
-
-    def write_to_csv(self, file_path, data_instances):
-        import csv
-        
-        with open(file_path, mode='w', newline='') as file:
-            writer = csv.writer(file)
-
-            # Write header
-            writer.writerow(data_instances[0].__annotations__.keys())
-
-            # Write data
-            for instance in data_instances:
-                writer.writerow(instance.__dict__.values())
-
-
-    def save_cutqc_obj (self, filename : Optional[str] = "cutqc_circuit") -> None:
-        '''
-        Saves CutQC instance as the pickle file 'FILENAME'
-        '''
-        print ("Saving file now!")
-        print ("Saving file now!")
-        from cutqc.cutqc_dataclass import AuxData
-        # Circuit information used to reconstruct subcircuit_entries and verification
-        csv_path = Path.cwd()        
-        csv_path = Path.joinpath(csv_path, "aux_meta_data.pkl")
-        
-        aux_meta_data = AuxData (self.compute_graph, self.complete_path_map, self.circuit, self.circuit.num_qubits, "Hello")
-        
-        with open(csv_path, 'wb') as outp:  # Overwrites any existing file.
-          pickle.dump(aux_meta_data, outp, pickle.HIGHEST_PROTOCOL)
-        
-        
-        exit ()
-
-        #open file in write mode
-        filename = "{}.tar".format(filename)
-
-        file_obj= tarfile.open(filename,"w")        
-        source_path = Path(self.tmp_data_folder)
-        
-        for file_path in source_path.rglob('*'):
-            if file_path.is_file():                                
-                print ("file_path: {}".format(file_path))
-                file_obj.add (file_path)                            
-
-        #close file
-        file_obj.close()              
-    
-    def verify(self):
-        verify_begin = perf_counter()
-        reconstructed_prob, self.approximation_error = full_verify(
-            full_circuit=self.circuit,
-            complete_path_map=self.complete_path_map,
-            subcircuits=self.subcircuits,
-            dd_bins=self.approximation_bins,
-        )
-        
-        print (f"Approximate Error: {self.approximation_error}")
-        print("verify took %.3f" % (perf_counter() - verify_begin))
-        return self.approximation_error
-  
-  
-        
-    def clean_data(self):
-        subprocess.run(["rm", "-r", self.tmp_data_folder])
 
     def _generate_metadata(self):
         self.compute_graph = generate_compute_graph(
@@ -324,12 +131,12 @@ class CutQC:
             subcircuits=self.subcircuits,
             complete_path_map=self.complete_path_map,
         )
-        import pprint    
-        
+
         (
             self.subcircuit_entries,
             self.subcircuit_instances,
         ) = generate_subcircuit_entries(compute_graph=self.compute_graph)
+
         if self.verbose:
             print("--> %s subcircuit_entries:" % self.name)
             for subcircuit_idx in self.subcircuit_entries:
@@ -345,68 +152,16 @@ class CutQC:
         """
         if self.verbose:
             print("--> Running Subcircuits %s" % self.name)
-        if os.path.exists(self.tmp_data_folder):
-            subprocess.run(["rm", "-r", self.tmp_data_folder])
-        os.makedirs(self.tmp_data_folder)
-        
-        prob_dict_2 = run_subcircuit_instances2 (
-            subcircuits=self.subcircuits,
-            subcircuit_instances=self.subcircuit_instances,
-            eval_mode=self.eval_mode,
-            num_shots_fn=self.num_shots_fn,
-            data_folder=self.tmp_data_folder,
-        )
+
         self.instance_init_meas_ids = {}
-        
-        prob_dict_1, self.instance_init_meas_ids = run_subcircuit_instances (
+
+        self.prob_dict, self.instance_init_meas_ids = run_subcircuit_instances(
             subcircuits=self.subcircuits,
             subcircuit_instances=self.subcircuit_instances,
             eval_mode=self.eval_mode,
             num_shots_fn=self.num_shots_fn,
             data_folder=self.tmp_data_folder,
         )
-        
-        self.prob_dict = prob_dict_1
-        return 0
-        
-        # Compare the two dictionaries
-        print("Comparing prob_dict_1 and prob_dict_2...")
-        
-        # Check if keys are the same
-        keys_match = set(prob_dict_1.keys()) == set(prob_dict_2.keys())
-        print(f"Keys match: {keys_match}")
-        
-        if not keys_match:
-            print(f"Keys in dict_1 only: {set(prob_dict_1.keys()) - set(prob_dict_2.keys())}")
-            print(f"Keys in dict_2 only: {set(prob_dict_2.keys()) - set(prob_dict_1.keys())}")
-        
-        exit ()
-        # Compare values for matching keys
-        matching_values = 0
-        total_keys = 0
-        for key in prob_dict_2.keys():
-            if key in prob_dict_1:
-                total_keys += 1
-                print ("type(){}".format (type(prob_dict_1[key])))
-                print (prob_dict_1[key])
-                print (prob_dict_2[key])
-                
-                import numpy as np
-                # Check if the numpy arrays are equal
-                if np.array_equal(prob_dict_1[key], prob_dict_2[key]):
-                    matching_values += 1
-                    print("Arrays are equal")
-                else:
-                    print("Arrays are NOT equal")
-                    exit ()
-                
-                
-        exit ()
-        
-        print(f"Matching values: {matching_values}/{total_keys}")
-        print(f"Dictionaries are {'identical' if prob_dict_1 == prob_dict_2 else 'different'}")
-        
-        # exit ()
 
     def _attribute_shots(self):
         """
@@ -415,64 +170,13 @@ class CutQC:
         """
         if self.verbose:
             print("--> Attribute shots %s" % self.name)
-        
+
         self.entry_init_meas_ids = {}
-        prob_dict_1, self.entry_init_meas_ids  = attribute_shots(
+        self.attributed_shots, self.entry_init_meas_ids = attribute_shots(
             subcircuit_entries=self.subcircuit_entries,
             subcircuits=self.subcircuits,
             eval_mode=self.eval_mode,
             instance_init_meas_ids=self.instance_init_meas_ids,
             prob_dict=self.prob_dict,
-            num_workers=20
+            num_workers=20,
         )
-        
-      
-        prob_dict_2= attribute_shots2(
-            subcircuit_entries=self.subcircuit_entries,
-            subcircuits=self.subcircuits,
-            eval_mode=self.eval_mode,
-            data_folder=self.tmp_data_folder            
-        )
-        
-        subprocess.call(
-            "rm %s/subcircuit*instance*.pckl" % self.tmp_data_folder, shell=True
-        )
-        
-        self.attributed_shots = prob_dict_1
-        return 0
-        print ("Done testing breh")
-        # Compare the two dictionaries
-        print("Comparing prob_dict_1 and prob_dict_2...")
-        
-        # Check if keys are the same
-        keys_match = set(prob_dict_1.keys()) == set(prob_dict_2.keys())
-        print(f"Keys match: {keys_match}")
-        
-        if not keys_match:
-            print(f"Keys in dict_1 only: {set(prob_dict_1.keys()) - set(prob_dict_2.keys())}")
-            print(f"Keys in dict_2 only: {set(prob_dict_2.keys()) - set(prob_dict_1.keys())}")
-        print (prob_dict_2.keys())
-        exit ()
-        # Compare values for matching keys
-        matching_values = 0
-        total_keys = 0
-        for key in prob_dict_2.keys():
-            if key in prob_dict_1:
-                total_keys += 1
-                print ("type(){}".format (type(prob_dict_1[key])))
-                print (prob_dict_1[key])
-                print (prob_dict_2[key])
-                
-                import numpy as np
-                # Check if the numpy arrays are equal
-                if np.array_equal(prob_dict_1[key], prob_dict_2[key]):
-                    matching_values += 1
-                    print("Arrays are equal")
-                else:
-                    print("Arrays are NOT equal")
-                    exit ()
-                    
-                
-                
-        exit ()
-        exit ()

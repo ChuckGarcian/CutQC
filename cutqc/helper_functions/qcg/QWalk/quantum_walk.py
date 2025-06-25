@@ -1,7 +1,5 @@
 from qiskit import QuantumCircuit, QuantumRegister
-import sys
 import math
-import numpy as np
 
 
 class QWALK:
@@ -29,7 +27,6 @@ class QWALK:
     """
 
     def __init__(self, N, barriers=False, regname=None):
-
         # number of vertices
         self.N = N
 

@@ -1,7 +1,4 @@
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
-import sys
-import math
-import numpy as np
 
 
 class BV:
@@ -26,7 +23,6 @@ class BV:
     """
 
     def __init__(self, secret=None, barriers=True, measure=False, regname=None):
-
         if secret is None:
             raise Exception(
                 "Provide a secret bitstring for the Bernstein-Vazirani circuit, example: 001101"
@@ -80,7 +76,7 @@ class BV:
         # with control qr[i] and target anc[0]
         # (secret is little endian - index 0 is at the top of the circuit)
         for i, bit in enumerate(self.secret[::-1]):
-            if bit is "1":
+            if bit == "1":
                 self.circ.cx(self.qr[i], self.qr[-1])
 
         # add barriers

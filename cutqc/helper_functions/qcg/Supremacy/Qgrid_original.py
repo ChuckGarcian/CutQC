@@ -2,7 +2,6 @@ from .Qbit_original import Qbit
 from .cz_layer_generation import get_layers
 from qiskit import QuantumCircuit, QuantumRegister, ClassicalRegister
 import math
-import sys
 import numpy as np
 
 

@@ -1,7 +1,3 @@
-import numpy as np
-import argparse
-
-
 def cz_layer(nrow, ncol, starting_idx):
     # Store the qubit locations for this layer's CZs as an array of indices
     cz_list = []
@@ -89,7 +85,6 @@ def get_row_major(n, m, loc):
 
 
 def main():
-
     n = 4
     m = 6
     layers = get_layers(n, m)

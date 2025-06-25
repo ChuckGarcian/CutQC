@@ -134,10 +134,8 @@ class MIP_Model(object):
         """
         for v in range(self.n_vertices):
             self.model.addConstr(
-                
-                gp.quicksum(
-                    [self.vertex_var[i][v] for i in range(self.num_subcircuit)]
-                ) == 1
+                gp.quicksum([self.vertex_var[i][v] for i in range(self.num_subcircuit)])
+                == 1
             )
 
         """
@@ -261,9 +259,6 @@ class MIP_Model(object):
             assert u < n_vertices
 
     def solve(self):
-        # print('solving for %d subcircuits'%self.num_subcircuit)
-        # print('model has %d variables, %d linear constraints,%d quadratic constraints, %d general constraints'
-        # % (self.model.NumVars,self.model.NumConstrs, self.model.NumQConstrs, self.model.NumGenConstrs))
         try:
             self.model.params.threads = 48
             self.model.Params.TimeLimit = 30
@@ -309,23 +304,23 @@ class MIP_Model(object):
 def read_circ(circuit):
     dag = circuit_to_dag(circuit)
     edges = []
-    
+
     node_name_ids = {}
     id_node_names = {}
     vertex_ids = {}
-    
+
     topological_node_id = 0
     qubit_gate_counter = {}
-    
+
     for qubit in dag.qubits:
         qubit_gate_counter[qubit] = 0
-    
+
     # Assign vertices a unique id w.r.t. their topological order and a unique name
-    # given from its op and qubits 
-    for vertex in dag.topological_op_nodes():        
+    # given from its op and qubits
+    for vertex in dag.topological_op_nodes():
         if len(vertex.qargs) != 2:
             raise Exception("vertex does not have 2 qargs!")
-                      
+
         arg0, arg1 = vertex.qargs
         vertex_name = "%s[%d]%d %s[%d]%d" % (
             arg0._register.name,
@@ -335,134 +330,27 @@ def read_circ(circuit):
             arg1._index,
             qubit_gate_counter[arg1],
         )
-            
+
         qubit_gate_counter[arg0] += 1
         qubit_gate_counter[arg1] += 1
-        
-        
+
         if vertex_name not in node_name_ids and vertex._node_id not in vertex_ids:
             node_name_ids[vertex_name] = topological_node_id
             id_node_names[topological_node_id] = vertex_name
-            vertex_ids[vertex._node_id] = topological_node_id            
-        
+            vertex_ids[vertex._node_id] = topological_node_id
+
             topological_node_id += 1
 
-    # Collect edge ids                  
-    for u, v, _ in dag.edges():      
-        
-        if type(u) == DAGOpNode and type(v) == DAGOpNode:      
+    # Collect edge ids
+    for u, v, _ in dag.edges():
+        if isinstance(u, type(DAGOpNode)) and isinstance(v, type(DAGOpNode)):
             u_id = vertex_ids[u._node_id]
             v_id = vertex_ids[v._node_id]
-            
-            edges.append((u_id, v_id)) 
-    
-    n_vertices = dag.size()
-    
-    return n_vertices, edges, node_name_ids, id_node_names
 
-
-def read_circ_2(circuit):
-    
-    dag = circuit_to_dag(circuit)
-    edges = []
-    
-    node_name_ids = {}
-    id_node_names = {}
-    vertex_ids = {}
-    
-    curr_node_id = 0
-    qubit_gate_counter = {}
-    
-    all_nodes_sanity = []
-    all_nodes_sanity_name = []
-    
-    for qubit in dag.qubits:
-        qubit_gate_counter[qubit] = 0
-    i = 0    
-    for vertex in dag.topological_op_nodes():
-        
-        all_nodes_sanity.append (id(vertex))
-        
-        if len(vertex.qargs) != 2:
-            raise Exception("vertex does not have 2 qargs!")
-                      
-        arg0, arg1 = vertex.qargs
-
-        vertex_name = "%s[%d]%d %s[%d]%d" % (
-            arg0._register.name,
-            arg0._index,
-            qubit_gate_counter[arg0],
-        
-            arg1._register.name,
-            arg1._index,
-            qubit_gate_counter[arg1],
-        )
-    
-        all_nodes_sanity_name.append (vertex_name)
-        
-        qubit_gate_counter[arg0] += 1
-        qubit_gate_counter[arg1] += 1
-        
-        
-        ## Add 
-        if vertex_name not in node_name_ids and id(vertex) not in vertex_ids:
-            i = i + 1
-            print (f"vertex name Executed! {id(vertex)}")
-            node_name_ids[vertex_name] = curr_node_id
-            id_node_names[curr_node_id] = vertex_name
-            vertex_ids[id(vertex)] = curr_node_id
-            curr_node_id += 1
-
-    i = 0
-    for u, v, _ in dag.edges():      
-        # if isinstance(u, DAGOpNode) and isinstance(v, DAGOpNode):
-        print (f"u is in list: {id(u) in all_nodes_sanity }")
-        print (f"v is in list: {id(v) in all_nodes_sanity }")
-        
-        print (f"Type(u){type(u)}")
-        print (f"Type(v){type(v)}")
-        
-        if type(u) == DAGOpNode and type(v) == DAGOpNode:
-            i = i + 1
-            
-            print (u.op.name)
-            print (v.op.name)
-            print (f"Line Executed! {i}")
-            
-            arg0, arg1 = u.qargs
-                        
-            vertex_name_u = "%s[%d]%d %s[%d]%d" % (
-                arg0._register.name,
-                arg0._index,
-                qubit_gate_counter[arg0],
-            
-                arg1._register.name,
-                arg1._index,
-                qubit_gate_counter[arg1],
-            )
-            arg0, arg1 = v.qargs
-            vertex_name_v = "%s[%d]%d %s[%d]%d" % (
-                  arg0._register.name,
-                  arg0._index,
-                  qubit_gate_counter[arg0],
-              
-                  arg1._register.name,
-                  arg1._index,
-                  qubit_gate_counter[arg1],
-              )
-            print (f"u name is in list: {id(u) in all_nodes_sanity }")
-            print (f"v name is in list: {id(v) in all_nodes_sanity }")
-              
-            print (id(u))
-            print (id(v))
-            
-            ## Ensure end nodes are in the all node list 
-            
-            u_id = vertex_ids[id(u)]
-            v_id = vertex_ids[id(v)]
-            edges.append((u_id, v_id)) 
+            edges.append((u_id, v_id))
 
     n_vertices = dag.size()
+
     return n_vertices, edges, node_name_ids, id_node_names
 
 
@@ -487,8 +375,7 @@ def cuts_parser(cuts, circ):
                     and dest_multi_Q_gate_idx == source_multi_Q_gate_idx + 1
                 ):
                     qubit_cut.append(source_qubit)
-        # if len(qubit_cut)>1:
-        #     raise Exception('one cut is cutting on multiple qubits')
+
         for x in source.split(" "):
             if x.split("]")[0] + "]" == qubit_cut[0]:
                 source_idx = int(x.split("]")[1])
@@ -794,7 +681,7 @@ def print_cutter_result(num_cuts, subcircuits, counter):
     for subcircuit_idx in range(len(subcircuits)):
         print("subcircuit %d" % subcircuit_idx)
         print(
-            "\u03C1 qubits = %d, O qubits = %d, width = %d, effective = %d, depth = %d, size = %d"
+            "\u03c1 qubits = %d, O qubits = %d, width = %d, effective = %d, depth = %d, size = %d"
             % (
                 counter[subcircuit_idx]["rho"],
                 counter[subcircuit_idx]["O"],

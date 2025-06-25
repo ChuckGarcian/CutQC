@@ -61,7 +61,6 @@ class RCAdder:
         measure=False,
         regname=None,
     ):
-
         # number of bits the adder can handle
         if nbits is None:
             raise Exception("Number of bits must be specified")
@@ -111,7 +110,7 @@ class RCAdder:
         """
         binstr = "{0:b}".format(value)
         for index, val in enumerate(reversed(binstr)):
-            if val is "1":
+            if val == "1":
                 self.circ.x(indices[index])
 
     def _toffoli(self, x, y, z):

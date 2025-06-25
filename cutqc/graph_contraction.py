@@ -1,8 +1,7 @@
-import itertools, math
+import itertools
 from time import perf_counter
-import numpy as np
-import logging, os
-from cutqc.post_process_helper import ComputeGraph
+import logging
+import os
 from cutqc.abstract_graph_contractor import AbstractGraphContractor
 import tensorflow as tf
 
@@ -12,17 +11,16 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 
 
 class GraphContractor(AbstractGraphContractor):
-    def __init__(self) -> None: 
+    def __init__(self) -> None:
         super().__init__()
-        self.times = {}            
+        self.times = {}
         self.reconstructed_prob = None
-        
+
         # Used to compute
         self.compute_graph = None
         self.subcircuit_entry_probs = None
         self.num_cuts = None
 
-    
     def _get_paulibase_probability(self, edge_bases: tuple, edges: list):
         """
         Returns the probability contribution for the basis 'EDGE_BASES' in the circuit
@@ -46,13 +44,15 @@ class GraphContractor(AbstractGraphContractor):
         return summation_term
 
     def _compute(self):
-        '''
+        """
         Internal function that actualy does the reconstruct
-        '''
+        """
         edges = self.compute_graph.get_edges(from_node=None, to_node=None)
 
         partial_compute_begin = perf_counter()
-        reconstructed_prob = tf.zeros_like(self._get_paulibase_probability(["I"] * len(edges), edges))
+        reconstructed_prob = tf.zeros_like(
+            self._get_paulibase_probability(["I"] * len(edges), edges)
+        )
         counter = 0
 
         # Compute Kronecker sums over the different basis
@@ -61,7 +61,7 @@ class GraphContractor(AbstractGraphContractor):
             reconstructed_prob = tf.add(reconstructed_prob, summation_term)
             self.overhead["additions"] += len(summation_term)
             counter += 1
-            
+
         self.compute_graph.remove_bases_from_edges(edges=self.compute_graph.edges)
         partial_compute_time = perf_counter() - partial_compute_begin
 

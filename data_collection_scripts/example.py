@@ -1,5 +1,4 @@
 import os
-import math
 import logging
 import argparse
 
@@ -10,8 +9,10 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 # from cutqc_runtime.main import CutQC # Use this just to benchmark the runtime
 from cutqc.main import CutQC  # Use this for exact computation
+
 # from cutqc_runtime.main import CutQC # Use this for exact computation
 from helper_functions.benchmarks import generate_circ
+
 
 def main(circuit_size, max_subcircuit_width, circuit_type):
     circuit_type = circuit_type
@@ -36,13 +37,13 @@ def main(circuit_size, max_subcircuit_width, circuit_type):
         },
         verbose=True,
     )
-    
+
     print("-- Cut --")
     cutqc.cut()
     if not cutqc.has_solution:
         raise Exception("The input circuit and constraints have no viable cuts")
     print("-- Done Cutting -- \n")
-    
+
     print("-- Evaluate --")
     cutqc.evaluate(eval_mode="sv", num_shots_fn=None)
     print("-- Done Evaluating -- \n")
@@ -50,17 +51,25 @@ def main(circuit_size, max_subcircuit_width, circuit_type):
     print("-- Build --")
     cutqc.build(mem_limit=128, recursion_depth=1)
     print("-- Done Building -- \n")
-    
+
     # cutqc.verify()
     # print("Cut: %d recursions." % (cutqc.num_recursions))
     # print(cutqc.approximation_bins)
     cutqc.clean_data()
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run CutQC with given parameters")
-    parser.add_argument('--circuit_size', type=int, required=True, help='Size of the circuit')
-    parser.add_argument('--max_subcircuit_width', type=int, required=True, help='Max width of subcircuit')
-    parser.add_argument('--circuit_type', type=str, required=True, help='Circuit Type')
+    parser.add_argument(
+        "--circuit_size", type=int, required=True, help="Size of the circuit"
+    )
+    parser.add_argument(
+        "--max_subcircuit_width",
+        type=int,
+        required=True,
+        help="Max width of subcircuit",
+    )
+    parser.add_argument("--circuit_type", type=str, required=True, help="Circuit Type")
     args = parser.parse_args()
-    
+
     main(args.circuit_size, args.max_subcircuit_width, args.circuit_type)

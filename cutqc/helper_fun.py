@@ -1,4 +1,3 @@
-from os import times
 from qiskit.converters import circuit_to_dag
 
 

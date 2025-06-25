@@ -1,11 +1,10 @@
 import itertools
 from time import perf_counter
 import numpy as np
-import logging, os
+import logging
+import tensorflow as tf
 
 logging.disable(logging.WARNING)
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-import tensorflow as tf
 
 
 def compute_summation_term(*argv):
@@ -60,8 +59,10 @@ class GraphContractor(object):
             self.compute_graph.assign_bases_to_edges(edge_bases=edge_bases, edges=edges)
             summation_term = None
             for subcircuit_idx in self.smart_order:
-                subcircuit_entry_prob = self.pseudo_subcircuit_entry_probs[subcircuit_idx]
-                
+                subcircuit_entry_prob = self.pseudo_subcircuit_entry_probs[
+                    subcircuit_idx
+                ]
+
                 if summation_term is None:
                     summation_term = subcircuit_entry_prob
                 else:
@@ -70,7 +71,7 @@ class GraphContractor(object):
                         [-1],
                     )
                     self.overhead["multiplications"] += len(summation_term)
-        
+
             if reconstructed_prob is None:
                 reconstructed_prob = summation_term
             else:

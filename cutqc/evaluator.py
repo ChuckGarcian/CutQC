@@ -1,9 +1,14 @@
-import itertools, copy, pickle, subprocess, psutil, os
+import itertools
+import copy
+import psutil
+import os
 import numpy as np
 from qiskit.converters import circuit_to_dag, dag_to_circuit
 from qiskit.circuit.library.standard_gates import HGate, SGate, SdgGate, XGate
 
-from helper_functions.non_ibmq_functions import find_process_jobs, scrambled
+from .helper_functions.non_ibmq_functions import (
+    evaluate_circ,
+)
 
 
 def get_num_workers(num_jobs, ram_required_per_worker):
@@ -25,48 +30,28 @@ def run_subcircuit_instances(
     qasm: noiseless qasm simulation
     runtime: for benchmarking, pseudo QPU backend generates uniform distribution
     """
-    
-    # print(f"subcircuits: {subcircuits}")
-    # print(f"subcircuit_instances: {type(subcircuit_instances)}")
-    # print(f"eval_mode: {eval_mode}")
-    # print(f"num_shots_fn: {num_shots_fn}")
-    # print(f"data_folder: {data_folder}")
-    
-    # subicrcuit_instances: Combination of different measurment bases of the same subcircuit    
-    #
-    subcircuits__instances_init_meas = {}
+
     instance_init_meas_ids = {}
-    measured_prob_dict = {} # Dictionary with key: unique subcircuit, value: dictionary containing instance and measured probability
+    measured_prob_dict = {}  # Dictionary with key: unique subcircuit, value: dictionary containing instance and measured probability
 
     for subcircuit_idx in subcircuit_instances:
         jobs = subcircuit_instances[subcircuit_idx]
-        instance_init_meas_ids[subcircuit_idx] = {jobs[i]: i for i in range(len(jobs))}                
-        
+        instance_init_meas_ids[subcircuit_idx] = {jobs[i]: i for i in range(len(jobs))}
 
-        
-        # print (type(subcircuit_instances[subcircuit_idx]))
-        # print (subcircuit_instances[subcircuit_idx])
-
-        # subcircuits__instances_init_meas[subcircuit_idx] = {jobs[i]: i for i in range(len(jobs))} # Assign unique idenifier to each job                                
         subcircuit = subcircuits[subcircuit_idx]
         uniform_p = 1 / 2**subcircuit.num_qubits
         num_shots = num_shots_fn(subcircuit) if num_shots_fn is not None else None
-        from helper_functions.non_ibmq_functions import evaluate_circ
-        
+
         for instance_init_meas in jobs:
-
-            
-            
-
-            if 'Z' in instance_init_meas[1]:
+            if "Z" in instance_init_meas[1]:
                 continue
-        
+
             subcircuit_instance = modify_subcircuit_instance(
                 subcircuit=subcircuit,
                 init=instance_init_meas[0],
                 meas=instance_init_meas[1],
             )
-        
+
             if eval_mode == "runtime":
                 subcircuit_inst_prob = uniform_p
             elif eval_mode == "sv":
@@ -81,94 +66,23 @@ def run_subcircuit_instances(
                 )
             else:
                 raise NotImplementedError
-            
+
             mutated_meas = mutate_measurement_basis(meas=instance_init_meas[1])
-        
+
             for meas in mutated_meas:
                 measured_prob = measure_prob(
                     unmeasured_prob=subcircuit_inst_prob, meas=meas
                 )
-                
-                
-                instance_init_meas_id = instance_init_meas_ids[subcircuit_idx][(instance_init_meas[0], meas)]                
-                
-                
-                
-                measured_prob_dict[(subcircuit_idx, instance_init_meas_id)] = measured_prob               
-    
+
+                instance_init_meas_id = instance_init_meas_ids[subcircuit_idx][
+                    (instance_init_meas[0], meas)
+                ]
+
+                measured_prob_dict[(subcircuit_idx, instance_init_meas_id)] = (
+                    measured_prob
+                )
 
     return measured_prob_dict, instance_init_meas_ids
-
-def run_subcircuit_instances2(
-    subcircuits, subcircuit_instances, eval_mode, num_shots_fn, data_folder
-):
-    """
-    subcircuit_instance_probs[subcircuit_idx][(instance_init,instance_meas)] = measured probability
-
-    eval_mode:
-    sv: statevector simulation
-    qasm: noiseless qasm simulation
-    runtime: for benchmarking, pseudo QPU backend generates uniform distribution
-    """
-    instance_init_meas_ids = {}
-    measured_prob_dict = {}
-    for subcircuit_idx in subcircuit_instances:
-        jobs = subcircuit_instances[subcircuit_idx]
-        instance_init_meas_ids[subcircuit_idx] = {jobs[i]: i for i in range(len(jobs))}                
-        
-        import pickle
-        pickle.dump(
-            {
-                "subcircuits": subcircuits,
-                "eval_mode": eval_mode,
-                "num_shots_fn": num_shots_fn,
-                "instance_init_meas_ids": instance_init_meas_ids,
-            },
-            open("%s/meta_info.pckl" % data_folder, "wb"),
-        )
-        num_workers = get_num_workers(
-            num_jobs=len(jobs),
-            ram_required_per_worker=2 ** subcircuits[subcircuit_idx].num_qubits
-            * 4
-            / 1e9,
-        )
-        procs = []
-        for rank in range(num_workers):
-            rank_jobs = find_process_jobs(jobs=jobs, rank=rank, num_workers=num_workers)
-            if len(rank_jobs) > 0:
-                pickle.dump(
-                    rank_jobs, open("%s/rank_%d.pckl" % (data_folder, rank), "wb")
-                )
-                python_command = (
-                    "python -m cutqc.parallel_run_subcircuits --data_folder %s --subcircuit_idx %d --rank %d"
-                    % (data_folder, subcircuit_idx, rank)
-                )
-                proc = subprocess.Popen(python_command.split(" "))
-                procs.append(proc)
-        [proc.wait() for proc in procs]
-        
-        
-        import glob
-        import pickle
-        
-        # Get all pickle files for this subcircuit
-        pickle_files = glob.glob(f"{data_folder}/subcircuit_{subcircuit_idx}_instance_*.pckl")
-        
-        # Load all the pickle files into a dictionary
-        measured_prob_dict = {}
-        for pickle_file in pickle_files:
-                        
-            # Extract instance ID from filename
-            instance_id = int(pickle_file.split('_instance_')[1].split('.pckl')[0])
-            with open(pickle_file, 'rb') as f:                
-                measured_prob_dict[(subcircuit_idx, instance_id)] = pickle.load(f)               
-                                    
-    
-    
-    return measured_prob_dict
-   
-
-
 
 
 def mutate_measurement_basis(meas):
@@ -261,7 +175,7 @@ def measure_prob(unmeasured_prob, meas):
         return unmeasured_prob
     else:
         measured_prob = np.zeros(int(2 ** meas.count("comp")))
-        
+
         for full_state, p in enumerate(unmeasured_prob):
             sigma, effective_state = measure_state(full_state=full_state, meas=meas)
             measured_prob[effective_state] += sigma * p
@@ -288,13 +202,19 @@ def measure_state(full_state, meas):
     return sigma, effective_state
 
 
-def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_meas_ids, prob_dict, num_workers = 20):
-    # meta_info = pickle.load(open("%s/meta_info.pckl" % data_folder, "rb"))      
-    
-    
+def attribute_shots(
+    subcircuit_entries,
+    subcircuits,
+    eval_mode,
+    instance_init_meas_ids,
+    prob_dict,
+    num_workers=20,
+):
+    # meta_info = pickle.load(open("%s/meta_info.pckl" % data_folder, "rb"))
+
     entry_probabilities = {}
     entry_init_meas_ids = {}
-    
+
     for subcircuit_idx in subcircuit_entries:
         entry_init_meas_ids[subcircuit_idx] = {}
         i = 0
@@ -302,19 +222,15 @@ def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_me
             entry_init_meas_ids[subcircuit_idx][key] = i
             i += 1
         jobs = list(subcircuit_entries[subcircuit_idx].keys())
-        
-  
+
         subcircuit = subcircuits[subcircuit_idx]
-        
-        
+
         # rank_jobs = pickle.load(
         #     open("%s/rank_%d.pckl" % (args.data_folder, args.rank), "rb")
         # )
 
         uniform_p = 1 / 2**subcircuit.num_qubits
-        jobs = {
-                key: subcircuit_entries[subcircuit_idx][key] for key in jobs
-        }
+        jobs = {key: subcircuit_entries[subcircuit_idx][key] for key in jobs}
         for subcircuit_entry_init_meas in jobs:
             if eval_mode != "runtime":
                 subcircuit_entry_term = jobs[subcircuit_entry_init_meas]
@@ -324,85 +240,22 @@ def attribute_shots(subcircuit_entries, subcircuits, eval_mode, instance_init_me
                     subcircuit_instance_init_meas_id = instance_init_meas_ids[
                         subcircuit_idx
                     ][subcircuit_instance_init_meas]
-                    subcircuit_instance_prob = prob_dict[(subcircuit_idx, subcircuit_instance_init_meas_id)]
-                    
+                    subcircuit_instance_prob = prob_dict[
+                        (subcircuit_idx, subcircuit_instance_init_meas_id)
+                    ]
+
                     if subcircuit_entry_prob is None:
                         subcircuit_entry_prob = coefficient * subcircuit_instance_prob
                     else:
                         subcircuit_entry_prob += coefficient * subcircuit_instance_prob
             else:
                 subcircuit_entry_prob = uniform_p
-            entry_init_meas_id = entry_init_meas_ids[subcircuit_idx][subcircuit_entry_init_meas]
+            entry_init_meas_id = entry_init_meas_ids[subcircuit_idx][
+                subcircuit_entry_init_meas
+            ]
             # print('%s --> rank %d writing subcircuit_%d_entry_%d'%(args.data_folder,args.rank,subcircuit_idx,entry_init_meas_id))
-            entry_probabilities[(subcircuit_idx, entry_init_meas_id)] = subcircuit_entry_prob
-    
+            entry_probabilities[(subcircuit_idx, entry_init_meas_id)] = (
+                subcircuit_entry_prob
+            )
 
     return entry_probabilities, entry_init_meas_ids
-
-
-
-
-def attribute_shots2(subcircuit_entries, subcircuits, eval_mode, data_folder):
-    import pickle
-    meta_info = pickle.load(open("%s/meta_info.pckl" % data_folder, "rb"))
-    instance_init_meas_ids = meta_info["instance_init_meas_ids"]
-    num_workers = 20
-    entry_init_meas_ids = {}
-    for subcircuit_idx in subcircuit_entries:
-        entry_init_meas_ids[subcircuit_idx] = {}
-        i = 0
-        for key in subcircuit_entries[subcircuit_idx]:
-            entry_init_meas_ids[subcircuit_idx][key] = i
-            i += 1
-        jobs = scrambled(list(subcircuit_entries[subcircuit_idx].keys()))
-        pickle.dump(
-            {
-                "subcircuits": subcircuits,
-                "eval_mode": eval_mode,
-                "instance_init_meas_ids": instance_init_meas_ids,
-                "entry_init_meas_ids": entry_init_meas_ids,
-            },
-            open("%s/meta_info.pckl" % data_folder, "wb"),
-        )
-        num_workers = get_num_workers(
-            num_jobs=len(jobs),
-            ram_required_per_worker=2 ** subcircuits[subcircuit_idx].num_qubits
-            * 4
-            / 1e9,
-        )
-        procs = []
-        for rank in range(num_workers):
-            rank_jobs = find_process_jobs(jobs=jobs, rank=rank, num_workers=num_workers)
-            rank_jobs = {
-                key: subcircuit_entries[subcircuit_idx][key] for key in rank_jobs
-            }
-            if len(rank_jobs) > 0:
-                pickle.dump(
-                    rank_jobs, open("%s/rank_%d.pckl" % (data_folder, rank), "wb")
-                )
-                python_command = (
-                    "python -m cutqc.parallel_attribute_shots --data_folder %s --subcircuit_idx %d --rank %d"
-                    % (data_folder, subcircuit_idx, rank)
-                )
-                proc = subprocess.Popen(python_command.split(" "))
-                procs.append(proc)
-        [proc.wait() for proc in procs]
-                      
-    import glob
-    import pickle
-    
-    measured_prob_dict = {}
-    for subcircuit_idx in subcircuit_entries:
-        # Get all pickle files for this subcircuit
-      pickle_files = glob.glob(f"{data_folder}/subcircuit_{subcircuit_idx}_entry*.pckl")
-          
-          # Load all the pickle files into a dictionary
-      
-      for pickle_file in pickle_files:
-                      
-          # Extract instance ID from filename
-          instance_id = int(pickle_file.split('_entry_')[1].split('.pckl')[0])
-          with open(pickle_file, 'rb') as f:                
-              measured_prob_dict[(subcircuit_idx, instance_id)] = pickle.load(f) 
-
-    return measured_prob_dict

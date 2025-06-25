@@ -1,10 +1,12 @@
 import qiskit.circuit.library as library
-import math, qiskit, random
+import math
+import qiskit
+import random
 import networkx as nx
 import numpy as np
 
-from qcg.generators import gen_supremacy, gen_hwea, gen_BV, gen_sycamore, gen_adder
-from helper_functions.random_benchmark import RandomCircuit
+from .qcg.generators import gen_supremacy, gen_hwea, gen_BV, gen_sycamore, gen_adder
+from .random_benchmark import RandomCircuit
 
 
 def factor_int(n):

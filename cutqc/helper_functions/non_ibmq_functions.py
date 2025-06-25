@@ -1,4 +1,7 @@
-import random, pickle, os, copy, random
+import pickle
+import os
+import copy
+import random
 from qiskit import QuantumCircuit
 import qiskit_aer as aer
 from qiskit.converters import circuit_to_dag, dag_to_circuit
@@ -7,7 +10,7 @@ from qiskit.quantum_info import Statevector
 import numpy as np
 import psutil
 
-from helper_functions.conversions import dict_to_array
+from .conversions import dict_to_array
 
 
 def scrambled(orig):

@@ -36,7 +36,6 @@ def sgn_star(n, i):
 
 
 def tau(a, n):
-
     istar = 0
     for i in range(0, 2 ** (n - 2)):
         istar_term = sgn_star(n, i) * (

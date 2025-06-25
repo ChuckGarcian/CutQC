@@ -4,12 +4,11 @@ Input:
 circ_dict (dict): circ (not transpiled), shots, evaluator_info (optional)
 """
 
-import math, copy, random, pickle
-import numpy as np
+import math
+import copy
+import pickle
 from qiskit.compiler import transpile, assemble
-from qiskit import transpile
 from qiskit_aer import Aer
-from qiskit_aer import QasmSimulator
 from time import time
 from datetime import datetime
 
@@ -174,7 +173,6 @@ class Scheduler:
                 start_idx = 0
                 for element_ctr, element in enumerate(schedule_item.circ_list):
                     key = element["key"]
-                    circ = element["circ"]
                     reps = element["reps"]
                     end_idx = start_idx + reps
                     # print('{:d}: getting {:d}-{:d}/{:d} circuits, key {} : {:d} qubit'.format(element_ctr,start_idx,end_idx-1,schedule_item.total_circs-1,key,len(circ.qubits)),flush=True)
