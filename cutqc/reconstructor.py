@@ -45,10 +45,7 @@ class CircuitReconstructor:
         """
         if self.verbose:
             print("--> Build %s" % (self.name))
-
-        ## Resume
-        # RESUME: So I need to figure out how to connectthe environment variables for distrbuted, e.g pytrochdistrbuted local rank, comptue backend ect, too where it is being used bellow.
-
+      
         self.dd = DynamicDefinition(
             cutqc_model=self.cutqc_model,
             mem_limit=self.mem_limit,
@@ -58,9 +55,6 @@ class CircuitReconstructor:
             compute_backend=self.compute_backend,
         )
         self.dd.build()
-
-        # self.times = add_times(times_a=self.times, times_b=self.dd.times)
-        print(type(self.dd.dd_bins))
 
         self.cutqc_model.approximation_bins = self.dd.dd_bins
         self.cutqc_model._is_reconstructed = True

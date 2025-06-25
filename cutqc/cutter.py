@@ -343,7 +343,7 @@ def read_circ(circuit):
 
     # Collect edge ids
     for u, v, _ in dag.edges():
-        if isinstance(u, type(DAGOpNode)) and isinstance(v, type(DAGOpNode)):
+        if isinstance(u, DAGOpNode) and isinstance(v, DAGOpNode):
             u_id = vertex_ids[u._node_id]
             v_id = vertex_ids[v._node_id]
 
