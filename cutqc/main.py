@@ -1,6 +1,6 @@
 from time import perf_counter
 
-from cutqc.cutqc_model import CutQCModel      
+from cutqc.cutqc_model import CutQCModel
 
 from cutqc.cutter import find_cuts
 from cutqc.evaluator import (
@@ -114,7 +114,7 @@ class CircuitCutter:
         self.times["evaluate"] = perf_counter() - evaluate_begin
         if self.verbose:
             print("evaluate took %e seconds" % self.times["evaluate"])
-        
+
         return CutQCModel(
             self.compute_graph,
             self.complete_path_map,

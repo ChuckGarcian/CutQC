@@ -5,13 +5,10 @@ import numpy as np
 
 
 # from cutqc.graph_contraction import GraphContractor
-from cutqc.distributed_graph_contraction import DistributedGraphContractor
 from cutqc.helper_fun import add_times
-from cutqc.distributed_helper import Device
-from cutqc.graph_contraction import GraphContractor
 
+from cutqc.abstract_graph_contractor import AbstractGraphContractor
 
-from typing import Optional
 
 from cutqc.cutqc_model import CutQCModel
 
@@ -53,25 +50,15 @@ class DynamicDefinition(object):
         cutqc_model: CutQCModel,
         mem_limit: int,
         recursion_depth: int,
-        pytorch_distributed: Optional[bool] = False,
-        local_rank: Optional[int] = None,
-        compute_backend: Optional[Device] = Device.CPU,
+        graph_contractor: AbstractGraphContractor,
     ) -> None:
         super().__init__()
 
         self.mem_limit = mem_limit
         self.recursion_depth = recursion_depth
         self.dd_bins = {}
-        self.local_rank = local_rank
 
-        self.graph_contractor = (
-            DistributedGraphContractor(
-                local_rank=self.local_rank, compute_backend=compute_backend
-            )
-            if (pytorch_distributed)
-            else GraphContractor()
-        )
-        self.pytorch_distributed = pytorch_distributed
+        self.graph_contractor = graph_contractor
         self.cutqc_model = cutqc_model
         self.overhead = {"additions": 0, "multiplications": 0}
         self.times = {"get_dd_schedule": 0, "merge_states_into_bins": 0, "sort": 0}

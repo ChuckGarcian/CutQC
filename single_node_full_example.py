@@ -1,16 +1,13 @@
 """
-Title: cut_and_eval.py
-Description: Example of how to cut and evaluate for the purposes of
-distributed reconstruction
+Title: single_node_full_example.py
+Description: Shows the creation, cutting, evaluation, and reconstruction of a circuit 
 """
 
 from cutqc import CircuitCutter, CircuitReconstructor
-
 from cutqc import generate_circ
 
 
 if __name__ == "__main__":
-    filename = "adder_example.pkl"
     circ_type = "adder"
     circ_size = 10
     max_width = 10
@@ -25,7 +22,7 @@ if __name__ == "__main__":
         seed=None,
     )
 
-    cutqc = CircuitCutter(
+    cutter = CircuitCutter(
         name="%s_%d" % (circ_type, circ_size),
         circuit=circuit,
         cutter_constraints={
@@ -38,19 +35,17 @@ if __name__ == "__main__":
     )
 
     print("--- Cut --- ")
-    cutqc.cut()
+    cutter.cut()
 
-    if not cutqc.has_solution:
+    if not cutter.has_solution:
         raise Exception("The input circuit and constraints have no viable cuts")
 
     print("--- Evaluate ---")
-    cutqc_model = cutqc.evaluate(eval_mode="sv", num_shots_fn=None)
+    cutqc_model = cutter.evaluate(eval_mode="sv", num_shots_fn=None)
 
     # Initiate Reconstruct
     print("--- Reconstruct ---")
     reconstructor = CircuitReconstructor(cutqc_model, mem_limit=32, recursion_depth=1)
     compute_time = reconstructor.build()
-
     cutqc_model.verify()
-
     print("Completed")

@@ -31,33 +31,37 @@ class DistributedGraphContractor(AbstractGraphContractor):
     def __init__(
         self, local_rank: int, compute_backend: distributed_helper.Device
     ) -> None:
+        print("Compute Backend: {}".format(compute_backend))
         self.local_rank = local_rank
 
-        # Set up compute devices based on backend
-        self.mp_backend = torch.device(
-            f"cuda:{local_rank}" if dist.get_backend() == "nccl" else "cpu"
-        )  # Deviced used MP
-        self.compute_device = (
-            torch.device(f"cuda:{local_rank}")
-            if compute_backend == "gpu"
-            else self.mp_backend
-        )
-        self.is_gpu = compute_backend == "gpu"
+        # Sets GPU-CUDA id if using GPU
+        if compute_backend == distributed_helper.Device.GPU:
+            self.compute_backend = torch.device(f"cuda:{local_rank}")
+        else:
+            self.compute_backend = distributed_helper.Device.CPU
+
+        print("Format: {}".format(self.compute_backend))
+
+        self.is_gpu = compute_backend == distributed_helper.Device.GPU
 
         print(
-            "Worker {}, compute_device: {}".format(
-                dist.get_rank(), self.compute_device
+            "Worker {}, compute_backend: {}".format(
+                dist.get_rank(), self.compute_backend
             ),
             flush=True,
         )
-
-        if dist.get_rank() != __host_machine__:
-            self._initiate_worker_loop()
 
         self.times = {"compute": 0}
         self.compute_graph = None
         self.subcircuit_entry_probs = None
         self.reconstructed_prob = None
+        self.worker_execution_state = True
+
+        if dist.get_rank() != __host_machine__:
+            self._initiate_worker_loop()
+
+        # dist.barrier()
+        # dist.destroy_process_group()
 
     def _get_paulibase_probability(self, edge_bases: tuple, edges: list):
         """
@@ -91,7 +95,7 @@ class DistributedGraphContractor(AbstractGraphContractor):
         Decomposes `dataset` list into 'num_batches' number of batches and distributes
         to worker processes.
         """
-        torch.set_default_device(self.mp_backend)
+        torch.set_default_device(self.compute_backend)
 
         with torch.no_grad():
             print("LEN(DATASET): {}".format(len(dataset)), flush=True)
@@ -132,7 +136,7 @@ class DistributedGraphContractor(AbstractGraphContractor):
                     dist.isend(tensor_sizes_shape, dst=dst_rank)
                     dist.isend(tensor_sizes, dst=dst_rank)
                     dist.isend(torch.tensor(batch.shape), dst=dst_rank)
-                    dist.isend(batch.to(self.compute_device), dst=dst_rank)
+                    dist.isend(batch.to(self.compute_backend), dst=dst_rank)
 
             # Receive Results
             output_buff = torch.zeros(self.result_size, dtype=torch.float32)
@@ -166,20 +170,15 @@ class DistributedGraphContractor(AbstractGraphContractor):
         """
         Receives tensors sent by host. Returns batch and unpadded sizes.
         """
-        torch.set_default_device(self.mp_backend)
-        torch.cuda.device(self.compute_device)
-        if self.is_gpu:
-            torch.cuda.device(self.compute_device)
+        torch.set_default_device(self.compute_backend)
+        torch.cuda.device(self.compute_backend)
 
         with torch.no_grad():
             tensor_sizes_shape = torch.empty([1], dtype=torch.int64)
             dist.recv(tensor=tensor_sizes_shape, src=0)
 
-            # Check for termination signal
-            if tensor_sizes_shape.item() == -1:
-                print(f"WORKER {dist.get_rank()} DYING", flush=True)
-                dist.destroy_process_group()
-                exit()
+            # Check for termination signal and handle it
+            self.termination_handler(tensor_sizes_shape)
 
             # Used to unflatten
             tensor_sizes = torch.empty(tensor_sizes_shape, dtype=torch.int64)
@@ -204,18 +203,18 @@ class DistributedGraphContractor(AbstractGraphContractor):
         operation back to the host. Synchronization among nodes is provided via
         barriers and blocked message passing.
         """
+        torch.cuda.device(self.compute_backend)
+        num_batches, batch, tensor_sizes = self._receive_from_host()
 
-        while True:
-            torch.cuda.device(self.compute_device)
-            num_batches, batch, tensor_sizes = self._receive_from_host()
-
+        # Executes until host sends termination signal (An empty tensor)
+        while self.worker_execution_state:
             # Ensure Enough Size
             gpu_free = torch.cuda.mem_get_info()[0]
             batch_mem_size = (
                 batch.element_size() * torch.prod(tensor_sizes) * num_batches
             )
             assert batch_mem_size < gpu_free, ValueError(
-                "Error 2006: Batch of size {}, to large for GPU device of size {}".format(
+                "Batch of size {}, to large for GPU device of size {}".format(
                     batch_mem_size, gpu_free
                 )
             )
@@ -232,11 +231,31 @@ class DistributedGraphContractor(AbstractGraphContractor):
 
             del batch
             res = res.sum(dim=0)
+            res = res
 
             # Send Back to host
             dist.reduce(
-                res.to(self.mp_backend), dst=__host_machine__, op=dist.ReduceOp.SUM
+                res.to(self.compute_backend), dst=__host_machine__, op=dist.ReduceOp.SUM
             )
+
+            # Next iteration data
+            num_batches, batch, tensor_sizes = self._receive_from_host()
+
+    def termination_handler(self, tensor_sig):
+        """Checks the recieved tensor for an agreed upon termination value (-1)"""
+        if tensor_sig.item() == -1:
+            print(f"WORKER {dist.get_rank()} DYING", flush=True)
+            self.worker_execution_state = False
+
+            host_sig = torch.zeros(1, dtype=torch.float32)
+            dist.reduce(
+                host_sig.to(self.compute_backend),
+                dst=__host_machine__,
+                op=dist.ReduceOp.SUM,
+            )
+
+            dist.destroy_process_group()
+            exit()
 
 
 def compute_kronecker_product(

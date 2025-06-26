@@ -1,7 +1,10 @@
 from cutqc.cutqc_model import CutQCModel
 from cutqc.dynamic_definition import DynamicDefinition
+from cutqc.distributed_graph_contraction import DistributedGraphContractor
+from cutqc.graph_contraction import GraphContractor
 from typing import Optional
 
+from cutqc import distributed_helper
 import os
 
 
@@ -35,24 +38,44 @@ class CircuitReconstructor:
         self.compute_backend = None
 
         if os.environ["PYTORCH"] == "True":
-            self.local_rank = os.environ["LOCAL_RANK"]
-            self.compute_backend = os.environ["COMPUTATION_DEVICE"]
             self.pytorch_distributed = True
+
+        self._init_graph_contractor()
+
+    def _init_graph_contractor(self):
+        """Sets the graph contractor depenedening on passed arguments"""
+        # if (os.environ["HOST"]=="True"): return 0
+
+        # Setup distributed environment variables and initializes workers into a loop
+        if self.pytorch_distributed:
+            print("Local Rank: {}".format(int(os.environ["LOCAL_RANK"])))
+            self.local_rank = int(os.environ["LOCAL_RANK"])
+            self.compute_backend = distributed_helper.Device(
+                os.environ["COMPUTATION_DEVICE"]
+            )
+
+            print("Computeational backend: {}".format(self.compute_backend))
+
+            self.graph_contractor = DistributedGraphContractor(
+                local_rank=self.local_rank, compute_backend=self.compute_backend
+            )
+
+        else:
+            self.graph_contractor = GraphContractor()
 
     def build(self):
         """
         mem_limit: memory limit during post process. 2^mem_limit is the largest vector
         """
+
         if self.verbose:
             print("--> Build %s" % (self.name))
-      
+
         self.dd = DynamicDefinition(
             cutqc_model=self.cutqc_model,
             mem_limit=self.mem_limit,
             recursion_depth=self.recursion_depth,
-            pytorch_distributed=self.pytorch_distributed,
-            local_rank=self.local_rank,
-            compute_backend=self.compute_backend,
+            graph_contractor=self.graph_contractor,
         )
         self.dd.build()
 

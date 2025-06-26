@@ -1,6 +1,7 @@
 """
-Title: dist_driver.py
-Description: Example of how CutQC can be used to efficiently reconstruct subcircuits
+Title: single_node_cpu_load_example.py
+Description: Example of loading a cutqc_model file using a single node. 
+Notice how cutqc distributed is not initialized
 """
 
 import os

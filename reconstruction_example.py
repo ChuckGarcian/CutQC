@@ -1,6 +1,6 @@
 """
-Title: dist_driver.py
-Description: Example of how CutQC can be used to efficiently reconstruct subcircuits
+Title: reconstruction_example.py
+Description: Example of how CutQC can be used to efficiently reconstruct subcircuits using GPUS
 """
 
 import os
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     compute_device = cutqc.Device.GPU
     communication_protocol = cutqc.Protocol.NCCL
 
-    CutQCDistributed(
+    CutQCDistributed.initialize(
         compute_device, communication_protocol, WORLD_RANK, WORLD_SIZE, GPUS_PER_NODE
     )
 
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     print("Done!")
     cutqc_model.verify()
 
-    CutQCDistributed.exit()
+    CutQCDistributed.terminate()

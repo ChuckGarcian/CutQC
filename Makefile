@@ -1,7 +1,7 @@
 # Directories
 OUTPUT := _output
-SLURM_DIR := slurm
-
+SLURM_DIR := Slurm
+COMMAND := code
 
 # Target Scripts
 SLURM?=reconstruction_example.slurm 
@@ -37,8 +37,8 @@ all: clean
 	@while [ ! -f "$(FULL_OUTPUT)" ]; do \
 					sleep 1; \
 	done
-	@if command -v code >/dev/null 2>&1; then \
-					code "$(FULL_OUTPUT)"; \
+	@if command -v $(COMMAND) >/dev/null 2>&1; then \
+					$(COMMAND) "$(FULL_OUTPUT)"; \
 	else \
 					echo -e $(BRed) Visual Studio Code not found. Output file is at: $(FULL_OUTPUT) $(NC); \
 	fi

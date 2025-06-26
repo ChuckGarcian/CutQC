@@ -24,4 +24,12 @@ salloc --nodes=1 --ntasks=4 --cpus-per-task=12 --mem=4G --time=01:20:00
 ## Export for quite tensorflow
 
 export TF_ENABLE_ONEDNN_OPTS=0
-export TF_CPP_MIN_LOG_LEVEL=2
+export TF_CPP_MIN_LOG_LEVEL=1
+
+## Torch Verbosity
+export NCCL_DEBUG=$debug_level # Turn on nccl debuging outputs
+export TORCH_DISTRIBUTED_DEBUG=DETAIL
+export TORCH_SHOW_CPP_STACKTRACES=1
+export TORCH_CPP_LOG_LEVEL=INFO
+export NCCL_DEBUG_SUBSYS=COLL
+export NCCL_DEBUG_SUBSYS=ALLOC
