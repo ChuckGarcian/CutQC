@@ -1,6 +1,6 @@
 """
 Title: single_node_full_example.py
-Description: Shows the creation, cutting, evaluation, and reconstruction of a circuit 
+Description: Shows the creation, cutting, evaluation, and reconstruction of a circuit
 """
 
 from cutqc import CircuitCutter, CircuitReconstructor

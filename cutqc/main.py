@@ -13,6 +13,8 @@ from cutqc.post_process_helper import (
     generate_compute_graph,
 )
 
+import qiskit
+from typing import Optional
 
 __host_machine__ = 0
 
@@ -25,10 +27,10 @@ class CircuitCutter:
 
     def __init__(
         self,
-        name=None,
-        circuit=None,
-        cutter_constraints=None,
-        verbose=False,
+        circuit: qiskit.circuit.quantumcircuit.QuantumCircuit,
+        cutter_constraints: dict,
+        verbose: Optional[bool] = False,
+        name: Optional[str] = "Circuit",
     ):
         """
         Args:
@@ -95,11 +97,16 @@ class CircuitCutter:
             self.has_solution = False
         self.times["cutter"] = perf_counter() - cutter_begin
 
-    def evaluate(self, eval_mode, num_shots_fn):
+        if not self.has_solution:
+            raise Exception("The input circuit and constraints have no viable cuts")
+
+    def evaluate(self, eval_mode, num_shots_fn) -> CutQCModel:
         """
-        eval_mode = qasm: simulate shots
-        eval_mode = sv: statevector simulation
-        num_shots_fn: a function that gives the number of shots to take for a given circuit
+        Args:
+            eval_mode: Evaluation mode. 'qasm' for shot simulation, 'sv' for statevector simulation
+            num_shots_fn: A function that gives the number of shots to take for a given circuit
+        Returns:
+            CutQCModel containing subcircuit vector outputs.
         """
         if self.verbose:
             print("*" * 20, "evaluation mode = %s" % (eval_mode), "*" * 20)

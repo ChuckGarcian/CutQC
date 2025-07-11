@@ -10,7 +10,7 @@ import os
 
 class CircuitReconstructor:
     """
-    The main module for CutQC
+    The Reconstructor module for CutQC
     cut --> evaluate results --> verify (optional)
     """
 
@@ -22,8 +22,6 @@ class CircuitReconstructor:
         verbose: Optional[bool] = False,
     ):
         """
-        --- Distributed Reconstruction Related Arguments ---
-
         cutqc_model: `CutQCModel` containing subcircuitt output vectors
 
         """
@@ -43,9 +41,7 @@ class CircuitReconstructor:
         self._init_graph_contractor()
 
     def _init_graph_contractor(self):
-        """Sets the graph contractor depenedening on passed arguments"""
-        # if (os.environ["HOST"]=="True"): return 0
-
+        """Sets the graph contractor depending on passed arguments"""      
         # Setup distributed environment variables and initializes workers into a loop
         if self.pytorch_distributed:
             print("Local Rank: {}".format(int(os.environ["LOCAL_RANK"])))
@@ -53,9 +49,7 @@ class CircuitReconstructor:
             self.compute_backend = distributed_helper.Device(
                 os.environ["COMPUTATION_DEVICE"]
             )
-
-            print("Computeational backend: {}".format(self.compute_backend))
-
+            
             self.graph_contractor = DistributedGraphContractor(
                 local_rank=self.local_rank, compute_backend=self.compute_backend
             )

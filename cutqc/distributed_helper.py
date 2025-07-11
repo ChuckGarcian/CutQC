@@ -148,7 +148,7 @@ class CutQCDistributed:
             os.environ["HOST"] = "True"
 
     def _cleanup(self) -> None:
-        """Send termination signal to workers via handshake """
+        """Send termination signal to workers via handshake"""
         if os.environ["HOST"] == "True" and dist.is_initialized():
             print("Host: Exiting Now!")
 

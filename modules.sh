@@ -33,3 +33,9 @@ export TORCH_SHOW_CPP_STACKTRACES=1
 export TORCH_CPP_LOG_LEVEL=INFO
 export NCCL_DEBUG_SUBSYS=COLL
 export NCCL_DEBUG_SUBSYS=ALLOC
+
+def get_slurm_envvars ():
+    GPUS_PER_NODE = int(os.environ["SLURM_GPUS_ON_NODE"])
+    WORLD_RANK = int(os.environ["SLURM_PROCID"])
+    WORLD_SIZE = int(os.environ["WORLD_SIZE"])
+    return GPUS_P

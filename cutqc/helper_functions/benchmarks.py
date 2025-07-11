@@ -132,3 +132,47 @@ def generate_circ(num_qubits, depth, circuit_type, reg_name, connected_only, see
             num_trials -= 1
     assert full_circ is None or full_circ.num_qubits == num_qubits
     return full_circ
+
+
+def simple_adder():
+    """Returns simple adder of size 10"""
+    circuit = generate_circ(
+        num_qubits=10,
+        depth=1,
+        circuit_type="adder",
+        reg_name="q",
+        connected_only=True,
+        seed=None,
+    )
+    cutter_constraints = {
+        "max_subcircuit_width": 10,
+        "max_subcircuit_cuts": 10,
+        "subcircuit_size_imbalance": 2,
+        "max_cuts": 10,
+        "num_subcircuits": [2],
+    }
+    return circuit, cutter_constraints
+
+
+def simple_supremacy():
+    """Size 16 Supremacy"""
+    circuit_type = "supremacy"
+    circuit_size = 16
+    circuit = generate_circ(
+        num_qubits=circuit_size,
+        depth=4,
+        circuit_type=circuit_type,
+        reg_name="q",
+        connected_only=True,
+        seed=None,
+    )
+
+    cutter_constraints = {
+            "max_subcircuit_width": math.ceil(circuit.num_qubits / 4 * 3),
+            "max_subcircuit_cuts": 10,
+            "subcircuit_size_imbalance": 2,
+            "max_cuts": 10,
+            "num_subcircuits": [2, 3, 4],
+        }
+    
+    return circuit, cutter_constraints

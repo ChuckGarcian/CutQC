@@ -5,10 +5,7 @@ Description: Example of how CutQC can be used to efficiently reconstruct subcirc
 
 import os
 import cutqc
-from cutqc import CircuitReconstructor
-from cutqc.cutqc_model import CutQCModel
 from cutqc.distributed_helper import CutQCDistributed
-
 
 # Environment variables set by slurm script
 GPUS_PER_NODE = int(os.environ["SLURM_GPUS_ON_NODE"])
@@ -26,12 +23,12 @@ if __name__ == "__main__":
 
     # Load CutQC Instance from Pickle
     print(f"--- Running {model_path} ---")
-    cutqc_model = CutQCModel.load_cutqc_model(model_path)
+    cutqc_model = cutqc.CutQCModel.load_cutqc_model(model_path)
 
     # Initiate Reconstruct
-    reconstructor = CircuitReconstructor(cutqc_model, mem_limit=32, recursion_depth=1)
+    reconstructor = cutqc.CircuitReconstructor(cutqc_model, mem_limit=32, recursion_depth=1)
     compute_time = reconstructor.build()
-    print("Done!")
+
     cutqc_model.verify()
 
     CutQCDistributed.terminate()

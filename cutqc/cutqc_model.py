@@ -14,17 +14,7 @@ import qiskit
 
 @dataclass
 class CutQCModel:
-    """Stores subcircuit outputs prior to reconstruction
-
-    Sets up to call the distributed kernel. Worker nodes
-
-    Args:
-        comm_backend: message passing backend internally used by pytorch for
-                    sending data between nodes
-        world_rank:   Global Identifier
-        world_size:   Total number of nodes
-        timeout:      Max amount of time pytorch will let any one node wait on
-                    a message before killing it.
+    """Stores subcircuit outputs prior to reconstruction                    
     """
 
     compute_graph: post_process_helper.ComputeGraph
@@ -83,13 +73,24 @@ class CutQCModel:
 
     @classmethod
     def load_cutqc_model(cls, filename: str) -> CutQCModel:
-        # Distributed execution initializes data on a single node
+        # In Distributed execution mode, only load data to host 
         if os.environ["PYTORCH"] == "TRUE" and os.environ["HOST"] == "False":
             return cls(None, None, None, None)
 
-        with open(filename, "rb") as dbfile:
-            return pickle.load(dbfile)
+        from pathlib import Path
 
+        from pathlib import Path
+        import pickle
+        
+        my_file = Path(filename)
+        
+        try:
+            my_abs_path = my_file.resolve(strict=True)
+        except FileNotFoundError:
+            raise FileNotFoundError(f"cutqc model file '{filename}' does not exist!")
+        else:
+            with open(my_abs_path, "rb") as dbfile:  
+                return pickle.load(dbfile)
 
 def full_verify(full_circuit, complete_path_map, subcircuits, dd_bins):
     ground_truth = non_ibmq_functions.evaluate_circ(
